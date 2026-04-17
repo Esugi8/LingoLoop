@@ -35,7 +35,10 @@ def create_drive_folder(folder_name, parent_id):
     file = service.files().create(body=file_metadata, fields='id').execute()
     return file.get('id')
 
-def process_youtube_video(url):
+# --- Script.py の該当箇所を修正 ---
+
+# 関数の引数に custom_folder_name を追加
+def process_youtube_video(url, custom_folder_name=None):
     local_video = "temp_video.mp4"
     local_json = "temp_subtitles.json"
 
@@ -49,6 +52,8 @@ def process_youtube_video(url):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         v_id = info['id']
+        # フォルダ名の決定：指定があればそれを使用、なければ動画ID
+        folder_display_name = custom_folder_name if custom_folder_name else v_id
 
     # 2. Gemini 解析
     print(f"--- Uploading {v_id} to Gemini ---")
@@ -58,30 +63,24 @@ def process_youtube_video(url):
         video_file = client.files.get(name=video_file.name)
 
     print("--- Analyzing with Gemini (High Precision) ---")
-    # 0.1秒単位の精度と、確実な日本語訳を指示するプロンプト
     prompt = """
     動画の英語音声を書き起こし、1〜2文ずつのセグメントに分けたJSON形式のリストを出力してください。
     
     [出力項目]
-    - 'start': 開始時間。必ず総秒数に対して0.1秒単位の精度（例: 12.3）の数値で出力してください。
-    - 'end': 終了時間。必ず総秒数に対して0.1秒単位の精度（例: 15.7）の数値で出力してください。
-    - 'text': 元の英語音声の書き起こし。
-    - 'translation': 学習に最適な、自然で正確な日本語訳。必ず日本語で出力してください。
-    - 'is_hard': 日本人にとって聞き取りにくい音声変化（連結、消失、フラップT等）があれば true。
-    - 'note': 'is_hard'がtrueの場合、その音声変化の理由を日本語で解説。
-    
-    [制約]
-    - 時間の数値は文字列（"12.3"）ではなく、数値（12.3）として出力すること。
-    - セグメント間に隙間がないよう、また英語の発音の始まりと終わりに正確に合わせてください。
-    - 出力は純粋なJSONのみ。解説文や ```json などの装飾は一切不要。
+    - 'start': 開始時間(数値、0.1秒単位)
+    - 'end': 終了時間(数値、0.1秒単位)
+    - 'text': 元の英語書き起こし
+    - 'translation': 日本語訳
+    - 'is_hard': 音声変化で聞き取りにくい箇所なら true
+    - 'note': 音声変化の理由(日本語)
     """
     
     response = client.models.generate_content(
-        model="gemini-3.1-flash-lite-preview", # または安定していれば gemini-2.0-flash
+        model="gemini-3.1-flash-lite-preview",
         contents=[video_file, prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=0.1, # 低めに設定して指示への忠実度を上げる
+            temperature=0.1,
         )
     )
     
@@ -91,7 +90,8 @@ def process_youtube_video(url):
     # 3. Google Drive への保存
     print("--- Storing to Google Drive ---")
     try:
-        v_folder_id = create_drive_folder(v_id, DRIVE_FOLDER_ID)
+        # フォルダ作成時に folder_display_name を使用
+        v_folder_id = create_drive_folder(folder_display_name, DRIVE_FOLDER_ID)
         upload_to_drive(local_video, v_folder_id, 'video/mp4')
         upload_to_drive(local_json, v_folder_id, 'application/json')
     except Exception as e:
@@ -101,7 +101,7 @@ def process_youtube_video(url):
     os.remove(local_video)
     os.remove(local_json)
     client.files.delete(name=video_file.name)
-    print(f"--- ALL DONE for {v_id} ---")
+    print(f"--- ALL DONE for {folder_display_name} ---")
 
 if __name__ == "__main__":
     test_url = "https://www.youtube.com/watch?v=z0PJnc8BFTk"

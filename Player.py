@@ -6,6 +6,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
+# --- Script.py から関数をインポート ---
+from Script import process_youtube_video
 
 # --- 設定 ---
 APP_NAME = "LingoLoop AI"
@@ -22,9 +24,9 @@ def get_drive_service():
 
 def list_saved_videos():
     service = get_drive_service()
-    # 親フォルダ内のフォルダ（動画ID）一覧を取得
+    # 親フォルダ内のフォルダ（動画ID）一覧を取得 (ゴミ箱を除外)
     results = service.files().list(
-        q=f"'{DRIVE_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder'",
+        q=f"'{DRIVE_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
         fields="files(id, name)"
     ).execute()
     return results.get('files', [])
@@ -50,12 +52,32 @@ def download_file(file_id):
 # --- メイン UI ---
 st.title(f"🎧 {APP_NAME}")
 
-# サイドバーで動画を選択
+# サイドバーの設定
 with st.sidebar:
+    # --- 新規動画の追加セクション ---
+    st.header("新規動画を追加")
+    new_url = st.text_input("YouTube URL")
+    new_folder_name = st.text_input("保存名 (空なら動画ID)")
+    
+    if st.button("解析開始"):
+        if new_url:
+            with st.spinner("解析中... 数分かかります"):
+                try:
+                    process_youtube_video(new_url, new_folder_name)
+                    st.success("解析完了！")
+                    st.rerun() # リストを更新するために再起動
+                except Exception as e:
+                    st.error(f"解析エラー: {e}")
+        else:
+            st.warning("URLを入力してください")
+
+    st.divider()
+
+    # --- 学習ライブラリセクション ---
     st.header("学習ライブラリ")
     videos = list_saved_videos()
     if not videos:
-        st.write("保存された動画がありません。Script.pyを実行してください。")
+        st.write("保存された動画がありません。")
     
     selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
 
