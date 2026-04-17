@@ -104,5 +104,5 @@ def process_youtube_video(url):
     print(f"--- ALL DONE for {v_id} ---")
 
 if __name__ == "__main__":
-    test_url = "https://www.youtube.com/watch?v=jZT0Tb_COsU"
+    test_url = "https://www.youtube.com/watch?v=z0PJnc8BFTk"
     process_youtube_video(test_url)
