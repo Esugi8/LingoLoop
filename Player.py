@@ -187,7 +187,7 @@ if selected_video:
             const now = v.currentTime;
             if (isRepeat) {{
                 const s = data[currentIdx];
-                if (now >= s.end || now < s.start - 0.3) {{ v.currentTime = s.start; v.play(); }}
+                if (now >= s.end -0.05 || now < s.start - 0.2) {{ v.currentTime = s.start; v.play(); }}
                 return;
             }}
             data.forEach((s, i) => {{
