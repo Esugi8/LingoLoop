@@ -1,68 +1,185 @@
 import streamlit as st
 import json
 import os
+import base64
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
 
 # --- 設定 ---
-VIDEO_PATH = "sample_video.mp4"
-JSON_PATH = "subtitles.json"
+APP_NAME = "LingoLoop AI"
+TOKEN_FILE = 'token.json'
+DRIVE_FOLDER_ID = '1S1c7T0qe1e84xDvEZsZBQuFRbLREph1C' # Script.pyと同じもの
+SCOPES = ['https://www.googleapis.com/auth/drive']
 
-st.set_page_config(page_title="Learning Player Check", layout="wide")
+st.set_page_config(page_title=APP_NAME, layout="wide")
 
-st.title("📖 英語学習プレイヤー機能チェック")
+# --- Google Drive 連携関数 ---
+def get_drive_service():
+    creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    return build('drive', 'v3', credentials=creds)
 
-def timestamp_to_seconds(ts):
-    """'0:03' や '1:20' などの形式を秒数(float)に変換する。既に数値ならそのまま返す。"""
-    if isinstance(ts, (int, float)):
-        return float(ts)
+def list_saved_videos():
+    service = get_drive_service()
+    # 親フォルダ内のフォルダ（動画ID）一覧を取得
+    results = service.files().list(
+        q=f"'{DRIVE_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder'",
+        fields="files(id, name)"
+    ).execute()
+    return results.get('files', [])
+
+def get_files_in_folder(folder_id):
+    service = get_drive_service()
+    results = service.files().list(
+        q=f"'{folder_id}' in parents",
+        fields="files(id, name, mimeType)"
+    ).execute()
+    return results.get('files', [])
+
+def download_file(file_id):
+    service = get_drive_service()
+    request = service.files().get_media(fileId=file_id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    return fh.getvalue()
+
+# --- メイン UI ---
+st.title(f"🎧 {APP_NAME}")
+
+# サイドバーで動画を選択
+with st.sidebar:
+    st.header("学習ライブラリ")
+    videos = list_saved_videos()
+    if not videos:
+        st.write("保存された動画がありません。Script.pyを実行してください。")
     
-    if isinstance(ts, str):
-        # '00:03' or '0:03' or '1:02:03' などの形式に対応
-        parts = ts.split(':')
-        if len(parts) == 2:  # MM:SS
-            return int(parts[0]) * 60 + float(parts[1])
-        elif len(parts) == 3:  # HH:MM:SS
-            return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
-    
-    return float(ts) # それ以外は型変換を試みる
+    selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
 
-# ファイル存在確認
-if not os.path.exists(VIDEO_PATH) or not os.path.exists(JSON_PATH):
-    st.error("ファイルが見つかりません。")
-    st.stop()
+# 動画が選択されたらデータを読み込む
+if selected_video:
+    with st.spinner("データを読み込んでいます..."):
+        folder_id = selected_video['id']
+        files = get_files_in_folder(folder_id)
+        
+        # JSONと動画のIDを特定
+        video_id = next(f['id'] for f in files if 'video' in f['mimeType'])
+        json_id = next(f['id'] for f in files if 'json' in f['mimeType'])
+        
+        # ダウンロード（メモリ上に保持）
+        video_data = download_file(video_id)
+        json_data = download_file(json_id)
+        
+        video_base64 = base64.b64encode(video_data).decode()
+        subtitles = json.loads(json_data.decode('utf-8'))
 
-with open(JSON_PATH, "r", encoding="utf-8") as f:
-    subtitles = json.load(f)
+    # JavaScript用のデータ作成
+    sub_data_js = []
+    for i, s in enumerate(subtitles):
+        # Geminiが判定した「難しい箇所」にアイコンをつける
+        prefix = "⚠️ " if s.get('is_hard') else ""
+        sub_data_js.append({
+            "id": i, "start": s['start'], "end": s['end'],
+            "text": prefix + s['text'], "translation": s['translation'],
+            "note": s.get('note', '')
+        })
 
-# 再生開始位置を保持
-if 'start_time' not in st.session_state:
-    st.session_state.start_time = 0.0
+    # --- プレイヤー HTML (iPhone対応版) ---
+    html_code = f"""
+    <div id="player-container" class="responsive-container">
+        <div class="video-section">
+            <video id="v" controls playsinline webkit-playsinline>
+                <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+            </video>
+            <div class="learning-controls">
+                <button class="ctrl-btn" id="btn-prev">⏮</button>
+                <button class="ctrl-btn" id="btn-repeat">🔁 <span id="r-status">OFF</span></button>
+                <button class="ctrl-btn" id="btn-next">⏭</button>
+            </div>
+        </div>
+        <div id="transcript" class="transcript-section">
+            <div class="sticky-header">
+                <label><input type="checkbox" id="toggle-jp" checked> 日本語訳</label>
+            </div>
+            <div id="sl"></div>
+        </div>
+    </div>
+    <style>
+        .responsive-container {{ display: flex; gap: 10px; font-family: sans-serif; height: 85vh; }}
+        .video-section {{ flex: 3; }}
+        .transcript-section {{ flex: 2; overflow-y: auto; background: #fafafa; border-radius: 8px; padding: 0 10px; }}
+        video {{ width: 100%; border-radius: 8px; background: #000; }}
+        .learning-controls {{ display: flex; gap: 5px; padding: 10px 0; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 8px; background: #2196f3; color: white; font-weight: bold; font-size: 1.2em; }}
+        .ctrl-btn.active {{ background: #f44336; }}
+        .sticky-header {{ position: sticky; top: 0; background: #fafafa; padding: 10px; border-bottom: 1px solid #eee; z-index: 10; }}
+        .item {{ padding: 12px; margin-bottom: 8px; border-radius: 8px; background: #fff; border: 1px solid #eee; cursor: pointer; }}
+        .item.active {{ background: #e3f2fd; border-left: 5px solid #2196f3; }}
+        .en {{ font-weight: bold; font-size: 1.1em; }}
+        .jp {{ font-size: 0.9em; color: #666; margin-top: 5px; }}
+        .note {{ font-size: 0.8em; color: #d32f2f; margin-top: 5px; font-style: italic; }}
+        .hidden {{ display: none; }}
+        @media (max-width: 600px) {{
+            .responsive-container {{ flex-direction: column; height: auto; }}
+            .video-section {{ position: sticky; top: 0; z-index: 100; background: white; }}
+            .transcript-section {{ height: 45vh; }}
+        }}
+    </style>
+    <script>
+        const data = {json.dumps(sub_data_js)};
+        const v = document.getElementById('v');
+        const sl = document.getElementById('sl');
+        let currentIdx = 0; let isRepeat = false;
 
-col_vid, col_txt = st.columns([3, 2])
+        data.forEach((s, i) => {{
+            const div = document.createElement('div');
+            div.id = 's-'+i; div.className = 'item';
+            div.innerHTML = `<div class="en">${{s.text}}</div>
+                             <div class="jp">${{s.translation}}</div>
+                             ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
+            div.onclick = () => jumpTo(i);
+            sl.appendChild(div);
+        }});
 
-with col_vid:
-    st.subheader("Video Player")
-    # st.video は秒数(int or float)を期待する
-    st.video(VIDEO_PATH, start_time=int(st.session_state.start_time))
-    st.write(f"現在のシーク位置: {st.session_state.start_time} 秒")
+        function jumpTo(idx) {{
+            if(idx < 0 || idx >= data.length) return;
+            currentIdx = idx; v.currentTime = data[idx].start; v.play();
+        }}
 
-with col_txt:
-    st.subheader("Segments")
-    show_translation = st.toggle("和訳を表示する", value=True)
+        document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
+        document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
+        const rBtn = document.getElementById('btn-repeat');
+        rBtn.onclick = () => {{
+            isRepeat = !isRepeat;
+            rBtn.classList.toggle('active', isRepeat);
+            document.getElementById('r-status').innerText = isRepeat ? "ON" : "OFF";
+        }};
+        document.getElementById('toggle-jp').onchange = (e) => {{
+            document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked));
+        }};
 
-    container = st.container(height=600)
-    with container:
-        for i, item in enumerate(subtitles):
-            with st.container(border=True):
-                st.write(f"**{item['text']}**")
-                if show_translation:
-                    st.caption(item['translation'])
-                
-                # ここで変換関数を適用
-                try:
-                    start_sec = timestamp_to_seconds(item['start'])
-                except:
-                    start_sec = 0.0
-
-                if st.button(f"▶ Play at {item['start']}", key=f"btn_{i}"):
-                    st.session_state.start_time = start_sec
-                    st.rerun()
+        v.addEventListener('timeupdate', () => {{
+            const now = v.currentTime;
+            if (isRepeat) {{
+                const s = data[currentIdx];
+                if (now >= s.end || now < s.start - 0.3) {{ v.currentTime = s.start; v.play(); }}
+                return;
+            }}
+            data.forEach((s, i) => {{
+                if (now >= s.start && now <= s.end) {{
+                    if (currentIdx !== i) {{
+                        document.getElementById('s-'+currentIdx).classList.remove('active');
+                        currentIdx = i;
+                        const el = document.getElementById('s-'+i);
+                        el.classList.add('active');
+                        el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                    }}
+                }}
+            }});
+        }});
+    </script>
+    """
+    st.iframe(html_code, height=900)
