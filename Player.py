@@ -301,4 +301,4 @@ if selected_video:
     </script>
     """
 
-    st.iframe(html_code, height=1200)
+    st.iframe(html_code, height=850)
