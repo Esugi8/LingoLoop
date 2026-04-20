@@ -133,7 +133,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML (2番目に固定・見切れ防止決定版) ---
+# --- プレイヤー HTML (SyntaxError修正版) ---
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-header">
@@ -157,29 +157,18 @@ if selected_video:
     </div>
 
     <style>
-        /* 1. 基本：画面を一切スクロールさせない */
         body, html {{ 
             margin: 0; padding: 0; height: 100vh; width: 100vw;
             overflow: hidden; font-family: sans-serif; background: #000;
         }}
-
-        /* 2. 全体を縦に並べる */
-        #app-wrapper {{ 
-            display: flex; flex-direction: column; height: 100vh; width: 100vw;
-        }}
-        
-        /* 3. ビデオエリア：上部に固定し、縮まない */
-        #video-header {{ 
-            flex-shrink: 0; background: #000; z-index: 10;
-        }}
+        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
+        #video-header {{ flex-shrink: 0; background: #000; z-index: 10; }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
-        
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
-        /* 4. 字幕エリア：残りのスペースを使い、独自にスクロール */
         #transcript-container {{
             flex-grow: 1;
             overflow-y: scroll;
@@ -187,11 +176,8 @@ if selected_video:
             -webkit-overflow-scrolling: touch;
             padding: 0 !important;
             margin: 0 !important;
-            /* スムーズスクロールをオフにして正確な位置合わせを優先 */
             scroll-behavior: auto !important; 
         }}
-
-        #sl {{ margin: 0; padding: 0; position: relative; }}
 
         .item {{ 
             padding: 12px 15px; 
@@ -202,16 +188,8 @@ if selected_video:
             opacity: 0.3;
             background: #fff;
         }}
-        
-        /* 現在の文：黄色 */
-        .item.active {{ 
-            background: #fff9c4 !important; 
-            border-left: 8px solid #2196f3; 
-            opacity: 1;
-        }}
-        /* 前後の文 */
+        .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
-
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
@@ -254,10 +232,9 @@ if selected_video:
                 }}
             }});
 
-            // 1つ前の文(idx-1)を最上部に持ってくることで、今の文(idx)を2番目にする
             if (idx === 0) {{
                 ts.scrollTop = 0;
-            } else {{
+            }} else {{
                 const prevEl = document.getElementById('s-'+(idx-1));
                 if (prevEl) {{
                     ts.scrollTop = prevEl.offsetTop;
