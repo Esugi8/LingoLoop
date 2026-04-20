@@ -115,10 +115,10 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-    # --- プレイヤー HTML (iPhone対応版) ---
+# --- プレイヤー HTML (スマホ最適化・動画固定版) ---
     html_code = f"""
     <div id="player-container" class="responsive-container">
-        <div class="video-section">
+        <div class="video-section" id="video-area">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
             </video>
@@ -136,30 +136,61 @@ if selected_video:
         </div>
     </div>
     <style>
-        .responsive-container {{ display: flex; gap: 10px; font-family: sans-serif; height: 85vh; }}
-        .video-section {{ flex: 3; }}
-        .transcript-section {{ flex: 2; overflow-y: auto; background: #fafafa; border-radius: 8px; padding: 0 10px; }}
+        /* 基本レイアウト */
+        .responsive-container {{ 
+            display: flex; 
+            gap: 10px; 
+            font-family: sans-serif; 
+            height: 90vh; 
+            overflow: hidden; /* 親のスクロールを禁止 */
+        }}
+        .video-section {{ flex: 3; display: flex; flex-direction: column; background: #fff; }}
+        .transcript-section {{ 
+            flex: 2; 
+            overflow-y: auto; 
+            background: #fafafa; 
+            border-radius: 8px; 
+            padding: 0 10px;
+            -webkit-overflow-scrolling: touch; /* iPhoneのなめらかスクロール */
+        }}
         video {{ width: 100%; border-radius: 8px; background: #000; }}
         .learning-controls {{ display: flex; gap: 5px; padding: 10px 0; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 8px; background: #2196f3; color: white; font-weight: bold; font-size: 1.2em; }}
+        .ctrl-btn {{ flex: 1; padding: 12px; border: none; border-radius: 8px; background: #2196f3; color: white; font-weight: bold; font-size: 1.1em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         .sticky-header {{ position: sticky; top: 0; background: #fafafa; padding: 10px; border-bottom: 1px solid #eee; z-index: 10; }}
         .item {{ padding: 12px; margin-bottom: 8px; border-radius: 8px; background: #fff; border: 1px solid #eee; cursor: pointer; }}
         .item.active {{ background: #e3f2fd; border-left: 5px solid #2196f3; }}
-        .en {{ font-weight: bold; font-size: 1.1em; }}
+        .en {{ font-weight: bold; font-size: 1.1em; line-height: 1.4; }}
         .jp {{ font-size: 0.9em; color: #666; margin-top: 5px; }}
         .note {{ font-size: 0.8em; color: #d32f2f; margin-top: 5px; font-style: italic; }}
         .hidden {{ display: none; }}
+
+        /* スマホ向け修正 */
         @media (max-width: 600px) {{
-            .responsive-container {{ flex-direction: column; height: auto; }}
-            .video-section {{ position: sticky; top: 0; z-index: 100; background: white; }}
-            .transcript-section {{ height: 45vh; }}
+            .responsive-container {{ 
+                flex-direction: column; 
+                height: 100vh; /* 全画面使う */
+                gap: 0;
+            }}
+            .video-section {{ 
+                position: sticky; 
+                top: 0; 
+                z-index: 1000; 
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                padding-bottom: 5px;
+            }}
+            .transcript-section {{ 
+                flex: 1; /* 残りのスペースをすべて使う */
+                height: auto; 
+            }}
+            .ctrl-btn {{ padding: 10px; font-size: 1em; }}
         }}
     </style>
     <script>
         const data = {json.dumps(sub_data_js)};
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
+        const ts = document.getElementById('transcript');
         let currentIdx = 0; let isRepeat = false;
 
         data.forEach((s, i) => {{
@@ -185,9 +216,6 @@ if selected_video:
             rBtn.classList.toggle('active', isRepeat);
             document.getElementById('r-status').innerText = isRepeat ? "ON" : "OFF";
         }};
-        document.getElementById('toggle-jp').onchange = (e) => {{
-            document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked));
-        }};
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
@@ -203,7 +231,14 @@ if selected_video:
                         currentIdx = i;
                         const el = document.getElementById('s-'+i);
                         el.classList.add('active');
-                        el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                        
+                        // --- 修正ポイント: ページ全体ではなく、リスト内だけをスクロールさせる ---
+                        const containerTop = ts.offsetTop;
+                        const itemTop = el.offsetTop;
+                        ts.scrollTo({{
+                            top: itemTop - ts.clientHeight / 2 + el.clientHeight / 2,
+                            behavior: 'smooth'
+                        }});
                     }}
                 }}
             }});
