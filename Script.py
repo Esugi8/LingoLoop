@@ -7,19 +7,27 @@ from google.genai import types
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
-from dotenv import load_dotenv
+import streamlit as st
+#from dotenv import load_dotenv
 
-load_dotenv("API.env")
+#load_dotenv("API.env")
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # --- 設定項目 ---
 TOKEN_FILE = 'token.json'
 DRIVE_FOLDER_ID = '1S1c7T0qe1e84xDvEZsZBQuFRbLREph1C' 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+#client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
+# def get_drive_service():
+    # creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # return build('drive', 'v3', credentials=creds)
+    
 def get_drive_service():
-    creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # ファイルからではなく、Secretsの辞書から認証情報を生成
+    token_info = st.secrets["google_drive_token"]
+    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
     return build('drive', 'v3', credentials=creds)
 
 def upload_to_drive(local_path, drive_folder_id, mime_type):

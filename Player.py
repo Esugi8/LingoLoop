@@ -18,8 +18,14 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 st.set_page_config(page_title=APP_NAME, layout="wide")
 
 # --- Google Drive 連携関数 ---
+# def get_drive_service():
+    # creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # return build('drive', 'v3', credentials=creds)
+    
 def get_drive_service():
-    creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # ファイルからではなく、Secretsの辞書から認証情報を生成
+    token_info = st.secrets["google_drive_token"]
+    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
     return build('drive', 'v3', credentials=creds)
 
 def list_saved_videos():
