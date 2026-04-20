@@ -56,10 +56,28 @@ def download_file(file_id):
     return fh.getvalue()
 
 # --- メイン UI ---
-st.title(f"🎧 {APP_NAME}")
+# タイトル (st.title) は削除
+
+# Streamlit自体の余白を消すための魔法のCSS
+st.markdown("""
+    <style>
+        /* メインコンテンツのパディングをゼロにする */
+        .block-container {
+            padding-top: 0rem;
+            padding-bottom: 0rem;
+            padding-left: 0rem;
+            padding-right: 0rem;
+        }
+        /* ヘッダー（右上のメニューなど）を隠す */
+        header {visibility: hidden;}
+        /* フッターを隠す */
+        footer {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
 
 # サイドバーの設定
 with st.sidebar:
+    st.header("LingoLoop AI") # サイドバーに名前を移動
     # --- 新規動画の追加セクション ---
     st.header("新規動画を追加")
     new_url = st.text_input("YouTube URL")
@@ -115,7 +133,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML (縦画面最適化：字幕を最上部へ) ---
+    # --- プレイヤー HTML (さらにコンパクト化) ---
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-fixed-container">
@@ -134,74 +152,45 @@ if selected_video:
         
         <div id="transcript-scroll-area">
             <div id="sl"></div>
-            <div style="height: 300px;"></div> <!-- 下部に余白を作り、最後の行も一番上に持っていけるようにする -->
+            <div style="height: 400px;"></div>
         </div>
     </div>
 
     <style>
-        /* ページ全体の固定 */
         body, html {{ margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }}
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; }}
-
-        /* 上部固定エリア */
+        
         #video-fixed-container {{
             flex-shrink: 0;
-            background: #fff;
+            background: #000;
             z-index: 1000;
-            border-bottom: 1px solid #ddd;
         }}
-        video {{ width: 100%; aspect-ratio: 16/9; background: #000; display: block; }}
+        video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         
-        .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #eee; }}
-        .ctrl-btn {{ flex: 1; padding: 10px; border: none; border-radius: 4px; background: #2196f3; color: white; font-weight: bold; font-size: 1em; }}
+        .learning-controls {{ display: flex; gap: 2px; padding: 2px; background: #333; }}
+        .ctrl-btn {{ flex: 1; padding: 12px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         
-        .jp-toggle-bar {{ padding: 6px 10px; font-size: 0.8em; color: #666; background: #f9f9f9; border-bottom: 1px solid #eee; }}
+        .jp-toggle-bar {{ padding: 5px 10px; font-size: 0.75em; color: #ccc; background: #222; }}
 
-        /* 下部スクロールエリア */
         #transcript-scroll-area {{
             flex-grow: 1;
             overflow-y: scroll;
             -webkit-overflow-scrolling: touch;
             background: #fff;
-            position: relative;
         }}
 
-        /* 字幕アイテム（文字サイズを一段階小さく） */
-        .item {{ 
-            padding: 10px 15px; 
-            border-bottom: 1px solid #eee; 
-            cursor: pointer; 
-            transition: background 0.2s;
-        }}
-        .item.active {{ 
-            background: #fff9c4; /* 実行中を強調（薄い黄色） */
-            border-left: 5px solid #2196f3; 
-        }}
-        .en {{ 
-            font-weight: bold; 
-            font-size: 0.95em; /* 文字サイズを縮小 */
-            line-height: 1.3; 
-            color: #111; 
-        }}
-        .jp {{ 
-            font-size: 0.85em; /* 文字サイズを縮小 */
-            color: #555; 
-            margin-top: 4px; 
-        }}
-        .note {{ 
-            font-size: 0.75em; 
-            color: #d32f2f; 
-            margin-top: 4px; 
-            padding-left: 5px;
-            border-left: 2px solid #ffcdd2;
-        }}
+        .item {{ padding: 12px 15px; border-bottom: 1px solid #eee; cursor: pointer; }}
+        .item.active {{ background: #fff9c4; border-left: 6px solid #2196f3; }}
+        .en {{ font-weight: bold; font-size: 0.95em; line-height: 1.3; color: #000; }}
+        .jp {{ font-size: 0.8em; color: #666; margin-top: 4px; }}
+        .note {{ font-size: 0.75em; color: #d32f2f; margin-top: 4px; padding-left: 5px; border-left: 2px solid #ffcdd2; }}
         .hidden {{ display: none; }}
 
         @media (min-width: 600px) {{
             #app-wrapper {{ flex-direction: row; }}
-            #video-fixed-container {{ width: 65%; height: 100vh; }}
-            #transcript-scroll-area {{ width: 35%; height: 100vh; }}
+            #video-fixed-container {{ width: 70%; height: 100vh; }}
+            #transcript-scroll-area {{ width: 30%; height: 100vh; }}
         }}
     </style>
 
@@ -277,6 +266,4 @@ if selected_video:
         }});
     </script>
     """
-    st.components.v1.html(html_code, height=800)
-    st.components.v1.html(html_code, height=800) # st.iframe ではなく st.components.v1.html を推奨
-    st.iframe(html_code, height=900)
+    st.iframe(html_code, height=1200)
