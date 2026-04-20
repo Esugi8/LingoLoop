@@ -133,7 +133,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML (フォーカス表示・リピート時ジャンプ対応) ---
+# --- プレイヤー HTML (要望をすべて反映した決定版) ---
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-fixed-container">
@@ -152,7 +152,7 @@ if selected_video:
         
         <div id="transcript-scroll-area">
             <div id="sl"></div>
-            <!-- 下部の余白は不要になったため削除（または小さく） -->
+            <div style="height: 600px;"></div> <!-- 下部余白 -->
         </div>
     </div>
 
@@ -160,38 +160,44 @@ if selected_video:
         body, html {{ margin: 0; padding: 0; height: 100vh; overflow: hidden; font-family: sans-serif; background: #fff; }}
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
         
-        #video-fixed-container {{ flex-shrink: 0; background: #000; z-index: 1000; width: 100%; }}
+        #video-fixed-container {{ flex-shrink: 0; background: #000; z-index: 1000; }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         
         .learning-controls {{ display: flex; gap: 2px; padding: 2px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.1em; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         .jp-toggle-bar {{ padding: 6px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
         #transcript-scroll-area {{
             flex-grow: 1;
-            overflow-y: auto;
+            overflow-y: scroll;
             background: #fff;
+            -webkit-overflow-scrolling: touch;
+            padding: 0 !important;
+            margin: 0 !important;
+            scroll-behavior: smooth;
         }}
 
         .item {{ 
             padding: 10px 15px; 
-            border-bottom: 1px solid #eee; 
+            border-bottom: 1px solid #f0f0f0; 
             cursor: pointer;
-            display: none; /* 基本は非表示 */
+            opacity: 0.3; /* 基本はかなり薄く */
+            transition: opacity 0.3s, background 0.3s;
+            box-sizing: border-box;
         }}
-        /* 表示対象（前1文、今、後2文）だけを表示 */
-        .item.show-context {{ 
-            display: block; 
-        }}
+        /* 現在の文 */
         .item.active {{ 
             background: #fff9c4; 
             border-left: 8px solid #2196f3; 
-            display: block;
+            opacity: 1; /* くっきり */
         }}
-        .en {{ font-weight: bold; font-size: 0.9em; line-height: 1.4; color: #000; }}
-        .jp {{ font-size: 0.8em; color: #555; margin-top: 4px; }}
-        .note {{ font-size: 0.75em; color: #d32f2f; margin-top: 4px; }}
+        /* 前1文、後ろ2文 */
+        .item.near {{ opacity: 0.8; }}
+
+        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
+        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
+        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
         .hidden {{ display: none !important; }}
 
         @media (min-width: 600px) {{
@@ -206,46 +212,52 @@ if selected_video:
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
         const ts = document.getElementById('transcript-scroll-area');
-        let currentIdx = 0; 
+        let currentIdx = -1; 
         let isRepeat = false;
 
-        // 全字幕の生成（最初はcurrentIdx=0付近を表示）
-        function buildSubtitles() {{
-            sl.innerHTML = '';
-            data.forEach((s, i) => {{
-                const div = document.createElement('div');
-                div.id = 's-'+i; 
-                div.className = 'item';
-                div.innerHTML = `<div class="en">${{s.text}}</div>
-                                 <div class="jp">${{s.translation}}</div>
-                                 ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
-                div.onclick = () => jumpTo(i);
-                sl.appendChild(div);
-            }});
-            updateDisplay(0);
-        }}
+        data.forEach((s, i) => {{
+            const div = document.createElement('div');
+            div.id = 's-'+i; 
+            div.className = 'item';
+            div.innerHTML = `<div class="en">${{s.text}}</div>
+                             <div class="jp">${{s.translation}}</div>
+                             ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
+            div.onclick = () => jumpTo(i);
+            sl.appendChild(div);
+        }});
 
-        // 表示の更新（前1文、今、後2文のみ表示）
-        function updateDisplay(idx) {{
+        function updateScroll(idx) {{
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
-                item.classList.remove('active', 'show-context');
-                if (i === idx) {{
-                    item.classList.add('active');
-                }} else if (i === idx - 1 || i === idx + 1 || i === idx + 2) {{
-                    item.classList.add('show-context');
+                item.classList.remove('active', 'near');
+                if (i === idx) item.classList.add('active');
+                else if (i === idx - 1 || i === idx + 1 || i === idx + 2) {{
+                    item.classList.add('near');
                 }}
             }});
-            // 常に一番上へ
-            ts.scrollTop = 0;
+
+            // --- 修正: 現在の文を「上から2番目」に表示するための計算 ---
+            if (idx === 0) {{
+                ts.scrollTop = 0;
+            }} else {{
+                const prevEl = document.getElementById('s-'+(idx-1));
+                if (prevEl) {{
+                    // 前の文の開始位置に合わせることで、現在の文が2行目になる
+                    ts.scrollTop = prevEl.offsetTop;
+                }}
+            }}
         }}
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
-            currentIdx = idx; // ここで即座にcurrentIdxを更新するのが重要
-            updateDisplay(idx);
-            v.currentTime = data[idx].start;
+            
+            // リピートモード時も即座にターゲットを切り替える
+            currentIdx = idx;
+            const s = data[idx];
+            
+            v.currentTime = s.start;
             v.play();
+            updateScroll(idx);
         }}
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
@@ -259,23 +271,15 @@ if selected_video:
         }};
 
         document.getElementById('toggle-jp').onchange = (e) => {{
-            const jpStyle = document.createElement('style');
-            jpStyle.id = "jp-hide-style";
-            jpStyle.innerHTML = ".jp {{ display: none; }}";
-            if (!e.target.checked) document.head.appendChild(jpStyle);
-            else {{
-                const s = document.getElementById("jp-hide-style");
-                if(s) s.remove();
-            }}
+            document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked));
         }};
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
-            const s = data[currentIdx];
 
-            // リピート処理
-            if (isRepeat) {{
-                // 現在のセグメントを越えたら戻る
+            // リピートON時の制御
+            if (isRepeat && currentIdx !== -1) {{
+                const s = data[currentIdx];
                 if (now >= s.end - 0.05 || now < s.start - 0.1) {{
                     v.currentTime = s.start;
                     v.play();
@@ -283,19 +287,18 @@ if selected_video:
                 return;
             }}
 
-            // 通常再生時の自動追従
+            // 通常再生時の追従
             for (let i = 0; i < data.length; i++) {{
                 if (now >= data[i].start && now < data[i].end) {{
                     if (currentIdx !== i) {{
                         currentIdx = i;
-                        updateDisplay(i);
+                        updateScroll(i);
                     }}
                     break;
                 }}
             }}
         }});
-
-        buildSubtitles();
     </script>
     """
+
     st.iframe(html_code, height=1200)
