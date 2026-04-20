@@ -307,5 +307,4 @@ if selected_video:
         }});
     </script>
     """
-
     st.iframe(html_code, height=1200)
