@@ -133,7 +133,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML (フォーカス・スクロール・ジャンプ改善版) ---
+# --- プレイヤー HTML (フォーカス表示・リピート時ジャンプ対応) ---
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-fixed-container">
@@ -152,7 +152,7 @@ if selected_video:
         
         <div id="transcript-scroll-area">
             <div id="sl"></div>
-            <div style="height: 500px;"></div> <!-- 最後の文も一番上に持っていけるように広めの余白 -->
+            <!-- 下部の余白は不要になったため削除（または小さく） -->
         </div>
     </div>
 
@@ -164,7 +164,7 @@ if selected_video:
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         
         .learning-controls {{ display: flex; gap: 2px; padding: 2px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.2em; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.1em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         .jp-toggle-bar {{ padding: 6px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
@@ -172,26 +172,23 @@ if selected_video:
             flex-grow: 1;
             overflow-y: auto;
             background: #fff;
-            -webkit-overflow-scrolling: touch;
-            padding: 0;
-            scroll-behavior: smooth;
         }}
 
         .item {{ 
-            padding: 12px 15px; 
-            border-bottom: 1px solid #f0f0f0; 
+            padding: 10px 15px; 
+            border-bottom: 1px solid #eee; 
             cursor: pointer;
-            opacity: 0.4; /* 非アクティブは薄くしてフォーカスさせる */
-            transition: opacity 0.3s, background 0.3s;
+            display: none; /* 基本は非表示 */
+        }}
+        /* 表示対象（前1文、今、後2文）だけを表示 */
+        .item.show-context {{ 
+            display: block; 
         }}
         .item.active {{ 
             background: #fff9c4; 
             border-left: 8px solid #2196f3; 
-            opacity: 1; /* 今の文はくっきり */
+            display: block;
         }}
-        /* 前後の文も少し見やすくする */
-        .item.near {{ opacity: 0.8; }}
-
         .en {{ font-weight: bold; font-size: 0.9em; line-height: 1.4; color: #000; }}
         .jp {{ font-size: 0.8em; color: #555; margin-top: 4px; }}
         .note {{ font-size: 0.75em; color: #d32f2f; margin-top: 4px; }}
@@ -209,45 +206,46 @@ if selected_video:
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
         const ts = document.getElementById('transcript-scroll-area');
-        let currentIdx = -1; 
+        let currentIdx = 0; 
         let isRepeat = false;
 
-        // 字幕を全件生成
-        data.forEach((s, i) => {{
-            const div = document.createElement('div');
-            div.id = 's-'+i; 
-            div.className = 'item';
-            div.innerHTML = `<div class="en">${{s.text}}</div>
-                             <div class="jp">${{s.translation}}</div>
-                             ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
-            div.onclick = () => jumpTo(i);
-            sl.appendChild(div);
-        }});
+        // 全字幕の生成（最初はcurrentIdx=0付近を表示）
+        function buildSubtitles() {{
+            sl.innerHTML = '';
+            data.forEach((s, i) => {{
+                const div = document.createElement('div');
+                div.id = 's-'+i; 
+                div.className = 'item';
+                div.innerHTML = `<div class="en">${{s.text}}</div>
+                                 <div class="jp">${{s.translation}}</div>
+                                 ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
+                div.onclick = () => jumpTo(i);
+                sl.appendChild(div);
+            }});
+            updateDisplay(0);
+        }}
 
-        function updateScroll(idx) {{
+        // 表示の更新（前1文、今、後2文のみ表示）
+        function updateDisplay(idx) {{
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
-                item.classList.remove('active', 'near');
-                if (i === idx) item.classList.add('active');
-                else if (Math.abs(i - idx) <= 2) item.classList.add('near');
+                item.classList.remove('active', 'show-context');
+                if (i === idx) {{
+                    item.classList.add('active');
+                }} else if (i === idx - 1 || i === idx + 1 || i === idx + 2) {{
+                    item.classList.add('show-context');
+                }}
             }});
-
-            // 現在の文を一番上へスクロール
-            const targetEl = document.getElementById('s-'+idx);
-            if (targetEl) {{
-                ts.scrollTo({{
-                    top: targetEl.offsetTop,
-                    behavior: 'smooth'
-                }});
-            }}
+            // 常に一番上へ
+            ts.scrollTop = 0;
         }}
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
-            currentIdx = idx; // 即座に更新
+            currentIdx = idx; // ここで即座にcurrentIdxを更新するのが重要
+            updateDisplay(idx);
             v.currentTime = data[idx].start;
             v.play();
-            updateScroll(idx);
         }}
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
@@ -261,15 +259,23 @@ if selected_video:
         }};
 
         document.getElementById('toggle-jp').onchange = (e) => {{
-            document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked));
+            const jpStyle = document.createElement('style');
+            jpStyle.id = "jp-hide-style";
+            jpStyle.innerHTML = ".jp {{ display: none; }}";
+            if (!e.target.checked) document.head.appendChild(jpStyle);
+            else {{
+                const s = document.getElementById("jp-hide-style");
+                if(s) s.remove();
+            }}
         }};
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
+            const s = data[currentIdx];
 
-            // リピート時のロジック（ジャンプ後も新しい範囲で動作）
-            if (isRepeat && currentIdx !== -1) {{
-                const s = data[currentIdx];
+            // リピート処理
+            if (isRepeat) {{
+                // 現在のセグメントを越えたら戻る
                 if (now >= s.end - 0.05 || now < s.start - 0.1) {{
                     v.currentTime = s.start;
                     v.play();
@@ -282,13 +288,14 @@ if selected_video:
                 if (now >= data[i].start && now < data[i].end) {{
                     if (currentIdx !== i) {{
                         currentIdx = i;
-                        updateScroll(i);
+                        updateDisplay(i);
                     }}
                     break;
                 }}
             }}
         }});
+
+        buildSubtitles();
     </script>
     """
-
     st.iframe(html_code, height=1200)
