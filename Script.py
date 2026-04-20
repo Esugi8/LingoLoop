@@ -75,6 +75,19 @@ def process_youtube_video(url, custom_folder_name=None):
         'outtmpl': local_video,
         'nocheckcertificate': True,
         'overwrites': True,
+        # --- 403エラー回避のための追加設定 ---
+        'quiet': True,
+        'no_warnings': True,
+        'headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android_vr', 'web_embedded']
+            }
+        }
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
