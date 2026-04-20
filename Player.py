@@ -133,10 +133,10 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML (SyntaxError修正版) ---
+# --- プレイヤー HTML (フォーカス・スクロール・ジャンプ改善版) ---
     html_code = f"""
     <div id="app-wrapper">
-        <div id="video-header">
+        <div id="video-fixed-container">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
             </video>
@@ -150,55 +150,57 @@ if selected_video:
             </div>
         </div>
         
-        <div id="transcript-container">
+        <div id="transcript-scroll-area">
             <div id="sl"></div>
-            <div style="height: 100vh;"></div>
+            <div style="height: 500px;"></div> <!-- 最後の文も一番上に持っていけるように広めの余白 -->
         </div>
     </div>
 
     <style>
-        body, html {{ 
-            margin: 0; padding: 0; height: 100vh; width: 100vw;
-            overflow: hidden; font-family: sans-serif; background: #000;
-        }}
+        body, html {{ margin: 0; padding: 0; height: 100vh; overflow: hidden; font-family: sans-serif; background: #fff; }}
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
-        #video-header {{ flex-shrink: 0; background: #000; z-index: 10; }}
+        
+        #video-fixed-container {{ flex-shrink: 0; background: #000; z-index: 1000; width: 100%; }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
-        .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
+        
+        .learning-controls {{ display: flex; gap: 2px; padding: 2px; background: #333; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
-        .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
+        .jp-toggle-bar {{ padding: 6px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
-        #transcript-container {{
+        #transcript-scroll-area {{
             flex-grow: 1;
-            overflow-y: scroll;
+            overflow-y: auto;
             background: #fff;
             -webkit-overflow-scrolling: touch;
-            padding: 0 !important;
-            margin: 0 !important;
-            scroll-behavior: auto !important; 
+            padding: 0;
+            scroll-behavior: smooth;
         }}
 
         .item {{ 
             padding: 12px 15px; 
-            border-bottom: 1px solid #eee; 
+            border-bottom: 1px solid #f0f0f0; 
             cursor: pointer;
-            box-sizing: border-box;
-            margin: 0;
-            opacity: 0.3;
-            background: #fff;
+            opacity: 0.4; /* 非アクティブは薄くしてフォーカスさせる */
+            transition: opacity 0.3s, background 0.3s;
         }}
-        .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
+        .item.active {{ 
+            background: #fff9c4; 
+            border-left: 8px solid #2196f3; 
+            opacity: 1; /* 今の文はくっきり */
+        }}
+        /* 前後の文も少し見やすくする */
         .item.near {{ opacity: 0.8; }}
-        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
-        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
-        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
+
+        .en {{ font-weight: bold; font-size: 0.9em; line-height: 1.4; color: #000; }}
+        .jp {{ font-size: 0.8em; color: #555; margin-top: 4px; }}
+        .note {{ font-size: 0.75em; color: #d32f2f; margin-top: 4px; }}
         .hidden {{ display: none !important; }}
 
         @media (min-width: 600px) {{
             #app-wrapper {{ flex-direction: row; }}
-            #video-header {{ width: 70%; height: 100vh; }}
-            #transcript-container {{ width: 30%; height: 100vh; }}
+            #video-fixed-container {{ width: 70%; height: 100vh; }}
+            #transcript-scroll-area {{ width: 30%; height: 100vh; }}
         }}
     </style>
 
@@ -206,10 +208,11 @@ if selected_video:
         const data = {json.dumps(sub_data_js)};
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
-        const ts = document.getElementById('transcript-container');
+        const ts = document.getElementById('transcript-scroll-area');
         let currentIdx = -1; 
         let isRepeat = false;
 
+        // 字幕を全件生成
         data.forEach((s, i) => {{
             const div = document.createElement('div');
             div.id = 's-'+i; 
@@ -222,29 +225,26 @@ if selected_video:
         }});
 
         function updateScroll(idx) {{
-            if (idx < 0) return;
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
                 item.classList.remove('active', 'near');
                 if (i === idx) item.classList.add('active');
-                else if (i === idx - 1 || i === idx + 1 || i === idx + 2) {{
-                    item.classList.add('near');
-                }}
+                else if (Math.abs(i - idx) <= 2) item.classList.add('near');
             }});
 
-            if (idx === 0) {{
-                ts.scrollTop = 0;
-            }} else {{
-                const prevEl = document.getElementById('s-'+(idx-1));
-                if (prevEl) {{
-                    ts.scrollTop = prevEl.offsetTop;
-                }}
+            // 現在の文を一番上へスクロール
+            const targetEl = document.getElementById('s-'+idx);
+            if (targetEl) {{
+                ts.scrollTo({{
+                    top: targetEl.offsetTop,
+                    behavior: 'smooth'
+                }});
             }}
         }}
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
-            currentIdx = idx;
+            currentIdx = idx; // 即座に更新
             v.currentTime = data[idx].start;
             v.play();
             updateScroll(idx);
@@ -252,18 +252,22 @@ if selected_video:
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
         document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
+        
         const rBtn = document.getElementById('btn-repeat');
         rBtn.onclick = () => {{
             isRepeat = !isRepeat;
             rBtn.classList.toggle('active', isRepeat);
             document.getElementById('r-status').innerText = isRepeat ? "ON" : "OFF";
         }};
+
         document.getElementById('toggle-jp').onchange = (e) => {{
             document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked));
         }};
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
+
+            // リピート時のロジック（ジャンプ後も新しい範囲で動作）
             if (isRepeat && currentIdx !== -1) {{
                 const s = data[currentIdx];
                 if (now >= s.end - 0.05 || now < s.start - 0.1) {{
@@ -272,6 +276,8 @@ if selected_video:
                 }}
                 return;
             }}
+
+            // 通常再生時の自動追従
             for (let i = 0; i < data.length; i++) {{
                 if (now >= data[i].start && now < data[i].end) {{
                     if (currentIdx !== i) {{
@@ -284,4 +290,5 @@ if selected_video:
         }});
     </script>
     """
+
     st.iframe(html_code, height=1200)
