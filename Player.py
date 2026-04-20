@@ -133,7 +133,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-    # --- プレイヤー HTML (さらにコンパクト化) ---
+# --- プレイヤー HTML (現在の字幕をエリア最上部へ固定) ---
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-fixed-container">
@@ -151,40 +151,52 @@ if selected_video:
         </div>
         
         <div id="transcript-scroll-area">
-            <div id="sl"></div>
-            <div style="height: 400px;"></div>
+            <div id="sl" style="position: relative;"></div>
+            <div style="height: 600px;"></div> <!-- 下部の余白を十分に確保 -->
         </div>
     </div>
 
     <style>
-        body, html {{ margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }}
-        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; }}
+        body, html {{ margin: 0; padding: 0; height: 100vh; overflow: hidden; font-family: sans-serif; background: #fff; }}
+        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
         
+        /* ビデオエリア */
         #video-fixed-container {{
             flex-shrink: 0;
             background: #000;
             z-index: 1000;
+            width: 100%;
         }}
-        video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
+        video {{ width: 100%; aspect-ratio: 16/9; display: block; background: #000; }}
         
+        /* コントロール */
         .learning-controls {{ display: flex; gap: 2px; padding: 2px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 12px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.2em; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
-        
-        .jp-toggle-bar {{ padding: 5px 10px; font-size: 0.75em; color: #ccc; background: #222; }}
+        .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.85em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
+        /* 字幕スクロールエリア */
         #transcript-scroll-area {{
             flex-grow: 1;
             overflow-y: scroll;
             -webkit-overflow-scrolling: touch;
             background: #fff;
+            padding: 0; /* 余計なパディングを排除 */
         }}
 
-        .item {{ padding: 12px 15px; border-bottom: 1px solid #eee; cursor: pointer; }}
-        .item.active {{ background: #fff9c4; border-left: 6px solid #2196f3; }}
-        .en {{ font-weight: bold; font-size: 0.95em; line-height: 1.3; color: #000; }}
-        .jp {{ font-size: 0.8em; color: #666; margin-top: 4px; }}
-        .note {{ font-size: 0.75em; color: #d32f2f; margin-top: 4px; padding-left: 5px; border-left: 2px solid #ffcdd2; }}
+        .item {{ 
+            padding: 12px 15px; 
+            border-bottom: 1px solid #eee; 
+            cursor: pointer;
+            box-sizing: border-box;
+        }}
+        .item.active {{ 
+            background: #fff9c4; 
+            border-left: 8px solid #2196f3; 
+        }}
+        .en {{ font-weight: bold; font-size: 0.95em; line-height: 1.4; color: #000; }}
+        .jp {{ font-size: 0.85em; color: #555; margin-top: 4px; }}
+        .note {{ font-size: 0.8em; color: #d32f2f; margin-top: 5px; font-style: italic; }}
         .hidden {{ display: none; }}
 
         @media (min-width: 600px) {{
@@ -204,7 +216,8 @@ if selected_video:
 
         data.forEach((s, i) => {{
             const div = document.createElement('div');
-            div.id = 's-'+i; div.className = 'item';
+            div.id = 's-'+i; 
+            div.className = 'item';
             div.innerHTML = `<div class="en">${{s.text}}</div>
                              <div class="jp">${{s.translation}}</div>
                              ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
@@ -220,14 +233,12 @@ if selected_video:
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
         document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
-        
         const rBtn = document.getElementById('btn-repeat');
         rBtn.onclick = () => {{
             isRepeat = !isRepeat;
             rBtn.classList.toggle('active', isRepeat);
             document.getElementById('r-status').innerText = isRepeat ? "ON" : "OFF";
         }};
-
         document.getElementById('toggle-jp').onchange = (e) => {{
             document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked));
         }};
@@ -237,7 +248,7 @@ if selected_video:
             
             if (isRepeat && currentIdx !== -1) {{
                 const s = data[currentIdx];
-                if (now >= s.end - 0.05 || now < s.start - 0.2) {{
+                if (now >= s.end - 0.05 || now < s.start - 0.1) {{
                     v.currentTime = s.start;
                     v.play();
                 }}
@@ -248,13 +259,16 @@ if selected_video:
                 const s = data[i];
                 if (now >= s.start && now < s.end) {{
                     if (currentIdx !== i) {{
-                        if(currentIdx !== -1) document.getElementById('s-'+currentIdx).classList.remove('active');
+                        if(currentIdx !== -1) {{
+                            document.getElementById('s-'+currentIdx).classList.remove('active');
+                        }}
                         
                         currentIdx = i;
                         const el = document.getElementById('s-'+i);
                         el.classList.add('active');
                         
-                        // --- 修正の要：現在の字幕を「一番上」に持ってくる ---
+                        // --- 修正: エリアの最上部(scrollTop = 0の位置)にアイテムを持ってくる ---
+                        // offsetTopはsl内での位置。slのpaddingを0にしているので、これがtsの最上部からの距離になる。
                         ts.scrollTo({{
                             top: el.offsetTop, 
                             behavior: 'smooth'
@@ -266,4 +280,5 @@ if selected_video:
         }});
     </script>
     """
+    # Streamlit Cloudの表示枠に合わせて高さを調整
     st.iframe(html_code, height=1200)
