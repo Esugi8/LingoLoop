@@ -133,10 +133,10 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML (要望をすべて反映した決定版) ---
+# --- プレイヤー HTML (2番目に固定・見切れ防止決定版) ---
     html_code = f"""
     <div id="app-wrapper">
-        <div id="video-fixed-container">
+        <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
             </video>
@@ -150,49 +150,66 @@ if selected_video:
             </div>
         </div>
         
-        <div id="transcript-scroll-area">
+        <div id="transcript-container">
             <div id="sl"></div>
-            <div style="height: 600px;"></div> <!-- 下部余白 -->
+            <div style="height: 100vh;"></div>
         </div>
     </div>
 
     <style>
-        body, html {{ margin: 0; padding: 0; height: 100vh; overflow: hidden; font-family: sans-serif; background: #fff; }}
-        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
+        /* 1. 基本：画面を一切スクロールさせない */
+        body, html {{ 
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            overflow: hidden; font-family: sans-serif; background: #000;
+        }}
+
+        /* 2. 全体を縦に並べる */
+        #app-wrapper {{ 
+            display: flex; flex-direction: column; height: 100vh; width: 100vw;
+        }}
         
-        #video-fixed-container {{ flex-shrink: 0; background: #000; z-index: 1000; }}
+        /* 3. ビデオエリア：上部に固定し、縮まない */
+        #video-header {{ 
+            flex-shrink: 0; background: #000; z-index: 10;
+        }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         
-        .learning-controls {{ display: flex; gap: 2px; padding: 2px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.2em; }}
+        .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
-        .jp-toggle-bar {{ padding: 6px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
+        .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
-        #transcript-scroll-area {{
+        /* 4. 字幕エリア：残りのスペースを使い、独自にスクロール */
+        #transcript-container {{
             flex-grow: 1;
             overflow-y: scroll;
             background: #fff;
             -webkit-overflow-scrolling: touch;
             padding: 0 !important;
             margin: 0 !important;
-            scroll-behavior: smooth;
+            /* スムーズスクロールをオフにして正確な位置合わせを優先 */
+            scroll-behavior: auto !important; 
         }}
 
+        #sl {{ margin: 0; padding: 0; position: relative; }}
+
         .item {{ 
-            padding: 10px 15px; 
-            border-bottom: 1px solid #f0f0f0; 
+            padding: 12px 15px; 
+            border-bottom: 1px solid #eee; 
             cursor: pointer;
-            opacity: 0.3; /* 基本はかなり薄く */
-            transition: opacity 0.3s, background 0.3s;
             box-sizing: border-box;
+            margin: 0;
+            opacity: 0.3;
+            background: #fff;
         }}
-        /* 現在の文 */
+        
+        /* 現在の文：黄色 */
         .item.active {{ 
-            background: #fff9c4; 
+            background: #fff9c4 !important; 
             border-left: 8px solid #2196f3; 
-            opacity: 1; /* くっきり */
+            opacity: 1;
         }}
-        /* 前1文、後ろ2文 */
+        /* 前後の文 */
         .item.near {{ opacity: 0.8; }}
 
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
@@ -202,8 +219,8 @@ if selected_video:
 
         @media (min-width: 600px) {{
             #app-wrapper {{ flex-direction: row; }}
-            #video-fixed-container {{ width: 70%; height: 100vh; }}
-            #transcript-scroll-area {{ width: 30%; height: 100vh; }}
+            #video-header {{ width: 70%; height: 100vh; }}
+            #transcript-container {{ width: 30%; height: 100vh; }}
         }}
     </style>
 
@@ -211,7 +228,7 @@ if selected_video:
         const data = {json.dumps(sub_data_js)};
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
-        const ts = document.getElementById('transcript-scroll-area');
+        const ts = document.getElementById('transcript-container');
         let currentIdx = -1; 
         let isRepeat = false;
 
@@ -227,6 +244,7 @@ if selected_video:
         }});
 
         function updateScroll(idx) {{
+            if (idx < 0) return;
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
                 item.classList.remove('active', 'near');
@@ -236,13 +254,12 @@ if selected_video:
                 }}
             }});
 
-            // --- 修正: 現在の文を「上から2番目」に表示するための計算 ---
+            // 1つ前の文(idx-1)を最上部に持ってくることで、今の文(idx)を2番目にする
             if (idx === 0) {{
                 ts.scrollTop = 0;
-            }} else {{
+            } else {{
                 const prevEl = document.getElementById('s-'+(idx-1));
                 if (prevEl) {{
-                    // 前の文の開始位置に合わせることで、現在の文が2行目になる
                     ts.scrollTop = prevEl.offsetTop;
                 }}
             }}
@@ -250,34 +267,26 @@ if selected_video:
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
-            
-            // リピートモード時も即座にターゲットを切り替える
             currentIdx = idx;
-            const s = data[idx];
-            
-            v.currentTime = s.start;
+            v.currentTime = data[idx].start;
             v.play();
             updateScroll(idx);
         }}
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
         document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
-        
         const rBtn = document.getElementById('btn-repeat');
         rBtn.onclick = () => {{
             isRepeat = !isRepeat;
             rBtn.classList.toggle('active', isRepeat);
             document.getElementById('r-status').innerText = isRepeat ? "ON" : "OFF";
         }};
-
         document.getElementById('toggle-jp').onchange = (e) => {{
             document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked));
         }};
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
-
-            // リピートON時の制御
             if (isRepeat && currentIdx !== -1) {{
                 const s = data[currentIdx];
                 if (now >= s.end - 0.05 || now < s.start - 0.1) {{
@@ -286,8 +295,6 @@ if selected_video:
                 }}
                 return;
             }}
-
-            // 通常再生時の追従
             for (let i = 0; i < data.length; i++) {{
                 if (now >= data[i].start && now < data[i].end) {{
                     if (currentIdx !== i) {{
@@ -301,4 +308,4 @@ if selected_video:
     </script>
     """
 
-    st.iframe(html_code, height=850)
+    st.iframe(html_code, height=1200)
