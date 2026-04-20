@@ -59,21 +59,21 @@ def download_file(file_id):
 # タイトル (st.title) は削除
 
 # Streamlit自体の余白を消すための魔法のCSS
-st.markdown("""
-    <style>
-        /* メインコンテンツのパディングをゼロにする */
-        .block-container {
-            padding-top: 0rem;
-            padding-bottom: 0rem;
-            padding-left: 0rem;
-            padding-right: 0rem;
-        }
-        /* ヘッダー（右上のメニューなど）を隠す */
-        header {visibility: hidden;}
-        /* フッターを隠す */
-        footer {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True)
+# st.markdown("""
+    # <style>
+        # /* メインコンテンツのパディングをゼロにする */
+        # .block-container {
+            # padding-top: 0rem;
+            # padding-bottom: 0rem;
+            # padding-left: 0rem;
+            # padding-right: 0rem;
+        # }
+        # /* ヘッダー（右上のメニューなど）を隠す */
+        # header {visibility: hidden;}
+        # /* フッターを隠す */
+        # footer {visibility: hidden;}
+    # </style>
+    # """, unsafe_allow_html=True)
 
 # サイドバーの設定
 with st.sidebar:
