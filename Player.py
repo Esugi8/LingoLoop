@@ -121,22 +121,11 @@ if selected_video:
         
         video_base64 = base64.b64encode(video_data).decode()
         subtitles = json.loads(json_data.decode('utf-8'))
-
-    # JavaScript用のデータ作成
-    sub_data_js = []
-    for i, s in enumerate(subtitles):
-        # Geminiが判定した「難しい箇所」にアイコンをつける
-        prefix = "⚠️ " if s.get('is_hard') else ""
-        sub_data_js.append({
-            "id": i, "start": s['start'], "end": s['end'],
-            "text": prefix + s['text'], "translation": s['translation'],
-            "note": s.get('note', '')
-        })
-
-# --- プレイヤー HTML (見切れ防止・2番目表示・全スクロール対応) ---
+        
+# --- プレイヤー HTML (合意に基づき、アップロードファイルをベースに改良) ---
     html_code = f"""
     <div id="app-wrapper">
-        <div id="video-header">
+        <div id="video-fixed-container">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
             </video>
@@ -152,61 +141,55 @@ if selected_video:
         
         <div id="transcript-scroll-area">
             <div id="sl"></div>
-            <div style="height: 600px;"></div>
+            <div style="height: 600px;"></div> <!-- 最後の文を2番目にするための余白 -->
         </div>
     </div>
 
     <style>
-        body, html {{ 
-            margin: 0; padding: 0; height: 100vh; width: 100vw;
-            overflow: hidden; font-family: sans-serif; background: #fff;
-        }}
+        body, html {{ margin: 0; padding: 0; height: 100vh; overflow: hidden; font-family: sans-serif; background: #fff; }}
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
         
-        #video-header {{ 
-            flex-shrink: 0; background: #000; z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }}
+        #video-fixed-container {{ flex-shrink: 0; background: #000; z-index: 1000; width: 100%; }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         
-        .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
+        .learning-controls {{ display: flex; gap: 2px; padding: 2px; background: #333; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 2px; background: #444; color: white; font-weight: bold; font-size: 1.1em; }}
         .ctrl-btn.active {{ background: #f44336; }}
-        .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
+        .jp-toggle-bar {{ padding: 6px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
         #transcript-scroll-area {{
             flex-grow: 1;
-            overflow-y: scroll;
+            overflow-y: auto; /* 全スクロールを許可 */
             background: #fff;
             -webkit-overflow-scrolling: touch;
-            padding: 0 !important;
-            margin: 0 !important;
-            scroll-behavior: auto; /* 確実な位置合わせのためautoに設定 */
+            scroll-behavior: auto; /* 確実な位置合わせのためauto */
         }}
 
         .item {{ 
-            padding: 12px 15px; 
+            padding: 10px 15px; 
             border-bottom: 1px solid #eee; 
             cursor: pointer;
-            box-sizing: border-box;
-            opacity: 0.3;
+            display: block; /* 常に表示 */
+            opacity: 0.3; /* 基本は薄く */
             transition: opacity 0.3s;
+        }}
+        /* 現在・前1・後2を強調 */
+        .item.show-context {{ 
+            opacity: 0.8; 
         }}
         .item.active {{ 
             background: #fff9c4 !important; 
             border-left: 8px solid #2196f3; 
             opacity: 1;
         }}
-        .item.near {{ opacity: 0.8; }}
-
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
-        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
+        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 4px; }}
         .hidden {{ display: none !important; }}
 
         @media (min-width: 600px) {{
             #app-wrapper {{ flex-direction: row; }}
-            #video-header {{ width: 70%; height: 100vh; }}
+            #video-fixed-container {{ width: 70%; height: 100vh; }}
             #transcript-scroll-area {{ width: 30%; height: 100vh; }}
         }}
     </style>
@@ -216,37 +199,42 @@ if selected_video:
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
         const ts = document.getElementById('transcript-scroll-area');
-        let currentIdx = -1; 
+        let currentIdx = 0; 
         let isRepeat = false;
 
-        data.forEach((s, i) => {{
-            const div = document.createElement('div');
-            div.id = 's-'+i; 
-            div.className = 'item';
-            div.innerHTML = `<div class="en">${{s.text}}</div>
-                             <div class="jp">${{s.translation}}</div>
-                             ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
-            div.onclick = () => jumpTo(i);
-            sl.appendChild(div);
-        }});
+        function buildSubtitles() {{
+            sl.innerHTML = '';
+            data.forEach((s, i) => {{
+                const div = document.createElement('div');
+                div.id = 's-'+i; 
+                div.className = 'item';
+                div.innerHTML = `<div class="en">${{s.text}}</div>
+                                 <div class="jp">${{s.translation}}</div>
+                                 ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}`;
+                div.onclick = () => jumpTo(i);
+                sl.appendChild(div);
+            }});
+            updateDisplay(0);
+        }}
 
-        function updateScroll(idx) {{
+        function updateDisplay(idx) {{
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
-                item.classList.remove('active', 'near');
-                if (i === idx) item.classList.add('active');
-                else if (i === idx - 1 || i === idx + 1 || i === idx + 2) {{
-                    item.classList.add('near');
+                item.classList.remove('active', 'show-context');
+                if (i === idx) {{
+                    item.classList.add('active');
+                }} else if (i === idx - 1 || i === idx + 1 || i === idx + 2) {{
+                    item.classList.add('show-context');
                 }}
             }});
 
-            // 1つ前の文を一番上にすることで、今の文を2番目にする（バッファ10px追加）
+            // 修正の要：1つ前の文(idx-1)の位置にスクロールさせる
             if (idx <= 0) {{
                 ts.scrollTop = 0;
             }} else {{
                 const prevEl = document.getElementById('s-'+(idx-1));
                 if (prevEl) {{
-                    ts.scrollTop = prevEl.offsetTop - 10;
+                    ts.scrollTop = prevEl.offsetTop;
                 }}
             }}
         }}
@@ -254,15 +242,11 @@ if selected_video:
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
             
-            v.pause(); // リピート処理を止めるために一旦停止
-            currentIdx = idx;
+            // リピート時も即座に次の文へ移るために先にidxを更新
+            currentIdx = idx; 
             v.currentTime = data[idx].start;
-            
-            // 確実にシークしてから再生
-            setTimeout(() => {{
-                v.play();
-                updateScroll(idx);
-            }}, 50);
+            v.play();
+            updateDisplay(idx);
         }}
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
@@ -281,9 +265,9 @@ if selected_video:
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
+            const s = data[currentIdx];
 
             if (isRepeat && currentIdx !== -1) {{
-                const s = data[currentIdx];
                 if (now >= s.end - 0.05 || now < s.start - 0.1) {{
                     v.currentTime = s.start;
                     v.play();
@@ -295,14 +279,14 @@ if selected_video:
                 if (now >= data[i].start && now < data[i].end) {{
                     if (currentIdx !== i) {{
                         currentIdx = i;
-                        updateScroll(i);
+                        updateDisplay(i);
                     }}
                     break;
                 }}
             }}
         }});
 
-        updateDisplay(0); // 初期化
+        buildSubtitles();
     </script>
     """
     st.iframe(html_code, height=1200)
