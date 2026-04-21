@@ -125,11 +125,11 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-    # --- プレイヤー HTML (ビデオと字幕を完全に分離) ---
+    # --- プレイヤー HTML (承認済み構成) ---
     html_code = f"""
     <div id="app-wrapper">
-        <!-- 上部：ビデオウィンドウ（固定） -->
-        <div id="video-area">
+        <!-- 上部：ビデオエリア（固定） -->
+        <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
             </video>
@@ -143,32 +143,26 @@ if selected_video:
             </div>
         </div>
         
-        <!-- 下部：字幕ウィンドウ（ビデオの直下から始まり、独自にスクロール） -->
-        <div id="transcript-container">
-            <div id="sl"></div>
-            <div style="height: 600px;"></div> <!-- 下部余白 -->
+        <!-- 下部：字幕エリア（ビデオの直下から開始） -->
+        <div id="transcript-scroll-area">
+            <div id="sl" style="position: relative; padding: 0; margin: 0;"></div>
+            <div style="height: 100vh;"></div> <!-- スクロール余白 -->
         </div>
     </div>
 
     <style>
         body, html {{ 
             margin: 0; padding: 0; height: 100vh; width: 100vw;
-            overflow: hidden; font-family: sans-serif; background: #000;
+            overflow: hidden; font-family: sans-serif; background: #fff;
         }}
         
-        /* 画面全体を縦に2分割する設定 */
         #app-wrapper {{ 
-            display: flex; 
-            flex-direction: column; 
-            height: 100vh; 
-            width: 100vw; 
+            display: flex; flex-direction: column; height: 100vh; 
         }}
         
-        /* ビデオエリアの設定 */
-        #video-area {{ 
-            flex-shrink: 0; /* サイズを固定 */
-            background: #000; 
-            z-index: 10; 
+        #video-header {{ 
+            flex-shrink: 0; background: #000; z-index: 100;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         
@@ -177,10 +171,9 @@ if selected_video:
         .ctrl-btn.active {{ background: #f44336; }}
         .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
-        /* 字幕ウィンドウの設定：ビデオの下に固定される */
-        #transcript-container {{
-            flex-grow: 1; /* 残りの画面スペースをすべて使う */
-            overflow-y: scroll; /* このエリア内だけでスクロール */
+        #transcript-scroll-area {{
+            flex-grow: 1; /* ビデオの下の全領域を占める */
+            overflow-y: scroll;
             background: #fff;
             -webkit-overflow-scrolling: touch;
             padding: 0 !important;
@@ -189,19 +182,23 @@ if selected_video:
 
         .item {{ 
             padding: 12px 15px; 
-            border-bottom: 1px solid #eee; 
+            border-bottom: 1px solid #f0f0f0; 
             cursor: pointer;
             box-sizing: border-box;
-            opacity: 0.3;
+            opacity: 0.2; /* 基本は薄く */
             transition: opacity 0.3s;
         }}
+        
+        /* 現在の文：2番目に配置される */
         .item.active {{ 
             background: #fff9c4 !important; 
             border-left: 8px solid #2196f3; 
-            opacity: 1; 
+            opacity: 1;
         }}
-        .item.near {{ opacity: 0.8; }}
         
+        /* 前後の文 */
+        .item.near {{ opacity: 0.8; }}
+
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
@@ -209,8 +206,8 @@ if selected_video:
 
         @media (min-width: 600px) {{
             #app-wrapper {{ flex-direction: row; }}
-            #video-area {{ width: 70%; height: 100vh; }}
-            #transcript-container {{ width: 30%; height: 100vh; }}
+            #video-header {{ width: 70%; height: 100vh; }}
+            #transcript-scroll-area {{ width: 30%; height: 100vh; }}
         }}
     </style>
 
@@ -218,7 +215,7 @@ if selected_video:
         const data = {json.dumps(sub_data_js)};
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
-        const ts = document.getElementById('transcript-container');
+        const ts = document.getElementById('transcript-scroll-area');
         let currentIdx = -1; 
         let isRepeat = false;
 
@@ -233,7 +230,7 @@ if selected_video:
             sl.appendChild(div);
         }});
 
-        function updateScroll(idx) {{
+        function updateDisplay(idx) {{
             if (idx < 0) return;
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
@@ -244,7 +241,7 @@ if selected_video:
                 }}
             }});
 
-            // 字幕ウィンドウ（ts）の最上部を、1つ前の文の上端に合わせる
+            // 1つ前の文を最上部に持ってくることで、今の文を確実に2番目にする
             if (idx === 0) {{
                 ts.scrollTop = 0;
             }} else {{
@@ -257,10 +254,12 @@ if selected_video:
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
+            
+            // 重要：リピートON時も即座に切り替える
             currentIdx = idx;
             v.currentTime = data[idx].start;
             v.play();
-            updateScroll(idx);
+            updateDisplay(idx);
         }}
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
@@ -277,6 +276,7 @@ if selected_video:
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
+            
             if (isRepeat && currentIdx !== -1) {{
                 const s = data[currentIdx];
                 if (now >= s.end - 0.05 || now < s.start - 0.1) {{
@@ -285,17 +285,19 @@ if selected_video:
                 }}
                 return;
             }}
+
             for (let i = 0; i < data.length; i++) {{
                 if (now >= data[i].start && now < data[i].end) {{
                     if (currentIdx !== i) {{
                         currentIdx = i;
-                        updateScroll(i);
+                        updateDisplay(i);
                     }}
                     break;
                 }}
             }}
         }});
-        updateScroll(0);
+
+        updateDisplay(0);
     </script>
     """
-    st.iframe(html_code, height=800)
+    st.iframe(html_code, height=1200)
