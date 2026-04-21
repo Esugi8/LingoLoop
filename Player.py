@@ -72,7 +72,7 @@ with st.sidebar:
     st.header("LingoLoop AI")
     
     # 修正：和訳の表示切替トグルを追加
-    show_jp = st.toggle("和訳を表示", value=True)
+    show_jp = st.toggle("和訳を表示", value=False)
     st.divider()
 
     st.subheader("新規動画を追加")
