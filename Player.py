@@ -124,7 +124,7 @@ if selected_video:
         })
 
     html_code = f"""
-    <div id="app-wrapper" class="hide-en hide-jp"> <!-- 初期状態は両方隠す -->
+    <div id="app-wrapper" class="hide-en hide-jp">
         <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
@@ -134,7 +134,6 @@ if selected_video:
                 <button class="ctrl-btn" id="btn-repeat">🔁 <span id="r-status">OFF</span></button>
                 <button class="ctrl-btn" id="btn-next">⏭</button>
             </div>
-            <!-- 表示切替トグルボタン -->
             <div class="visibility-controls">
                 <button class="vis-btn" id="toggle-en-btn">英</button>
                 <button class="vis-btn" id="toggle-jp-btn">日</button>
@@ -147,48 +146,31 @@ if selected_video:
         </div>
     </div>
     <style>
+        /* (CSS部分は変更なし) */
         body, html {{ margin: 0; padding: 0; height: 100vh; width: 100vw; overflow: hidden; font-family: sans-serif; background: #fff; }}
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
         #video-header {{ flex-shrink: 0; background: #000; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
-        
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
-
         .visibility-controls {{ display: flex; gap: 8px; padding: 6px 12px; background: #222; align-items: center; border-bottom: 1px solid #444; }}
         .vis-btn {{ padding: 6px 16px; border: 1px solid #666; border-radius: 20px; background: #444; color: #aaa; font-weight: bold; cursor: pointer; transition: 0.2s; }}
         .vis-btn.active {{ background: #2196f3; color: white; border-color: #2196f3; }}
         .vis-label {{ color: #888; font-size: 0.8em; margin-left: 5px; }}
-
         #transcript-scroll-area {{ flex-grow: 1; overflow-y: scroll; background: #fff; -webkit-overflow-scrolling: touch; padding: 0 !important; margin: 0 !important; }}
-        
-        .item {{ 
-            position: relative;
-            padding: 12px 60px 12px 15px;
-            border-bottom: 1px solid #f0f0f0; 
-            cursor: pointer; box-sizing: border-box; 
-            opacity: 0.2; transition: opacity 0.3s;
-            user-select: text; -webkit-user-select: text;
-        }}
+        .item {{ position: relative; padding: 12px 60px 12px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; box-sizing: border-box; opacity: 0.2; transition: opacity 0.3s; user-select: text; -webkit-user-select: text; }}
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
-
         .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
         .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
-
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; display: block; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; display: block; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
-
-        /* --- 英語：黒塗りバー（伏せ字） --- */
         #app-wrapper.hide-en .en {{ background-color: #555; color: #555; border-radius: 4px; user-select: none; }}
         #app-wrapper.hide-en .mini-copy-btn:first-child {{ display: none; }}
-
-        /* --- 和訳：単純な非表示 --- */
         #app-wrapper.hide-jp .jp {{ display: none; }}
         #app-wrapper.hide-jp .mini-copy-btn:last-child {{ display: none; }}
-
         @media (min-width: 600px) {{ #app-wrapper {{ flex-direction: row; }} #video-header {{ width: 70%; height: 100vh; }} #transcript-scroll-area {{ width: 30%; height: 100vh; }} }}
     </style>
     <script>
@@ -199,6 +181,7 @@ if selected_video:
         const wrapper = document.getElementById('app-wrapper');
         let currentIdx = -1; 
         let isRepeat = false;
+        let isWaiting = false; // 修正：1秒待機フラグ
 
         function copyText(txt) {{
             navigator.clipboard.writeText(txt);
@@ -206,20 +189,12 @@ if selected_video:
 
         const btnEn = document.getElementById('toggle-en-btn');
         const btnJp = document.getElementById('toggle-jp-btn');
-
-        btnEn.onclick = () => {{
-            const isHidden = wrapper.classList.toggle('hide-en');
-            btnEn.classList.toggle('active', !isHidden);
-        }};
-        btnJp.onclick = () => {{
-            const isHidden = wrapper.classList.toggle('hide-jp');
-            btnJp.classList.toggle('active', !isHidden);
-        }};
+        btnEn.onclick = () => {{ wrapper.classList.toggle('hide-en') ? btnEn.classList.remove('active') : btnEn.classList.add('active'); }};
+        btnJp.onclick = () => {{ wrapper.classList.toggle('hide-jp') ? btnJp.classList.remove('active') : btnJp.classList.add('active'); }};
 
         data.forEach((s, i) => {{
             const div = document.createElement('div');
-            div.id = 's-'+i; 
-            div.className = 'item';
+            div.id = 's-'+i; div.className = 'item';
             div.innerHTML = `
                 <div class="copy-group">
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}')">EN</button>
@@ -247,6 +222,7 @@ if selected_video:
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
+            isWaiting = false; // 修正：ジャンプ時は待機をキャンセル
             currentIdx = idx;
             v.currentTime = data[idx].start;
             v.play();
@@ -260,15 +236,30 @@ if selected_video:
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
-            if (isRepeat && currentIdx !== -1) {{
+            
+            // 修正：リピート再生時の「1秒待機」ロジック
+            if (isRepeat && currentIdx !== -1 && !isWaiting) {{
                 const s = data[currentIdx];
-                if (now >= s.end - 0.05 || now < s.start - 0.1) {{ v.currentTime = s.start; v.play(); }}
-                return;
+                if (now >= s.end - 0.05) {{
+                    isWaiting = true;
+                    v.pause();
+                    setTimeout(() => {{
+                        if (isRepeat && isWaiting) {{ // まだリピート設定かつ待機中なら
+                            v.currentTime = s.start;
+                            v.play();
+                        }}
+                        isWaiting = false;
+                    }}, 1000); // 1000ms = 1秒
+                    return;
+                }}
             }}
-            for (let i = 0; i < data.length; i++) {{
-                if (now >= data[i].start && now < data[i].end) {{
-                    if (currentIdx !== i) {{ currentIdx = i; updateDisplay(i); }}
-                    break;
+
+            if (!isWaiting) {{
+                for (let i = 0; i < data.length; i++) {{
+                    if (now >= data[i].start && now < data[i].end) {{
+                        if (currentIdx !== i) {{ currentIdx = i; updateDisplay(i); }}
+                        break;
+                    }}
                 }}
             }}
         }});
