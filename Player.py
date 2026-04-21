@@ -195,7 +195,7 @@ if selected_video:
             const div = document.createElement('div');
             div.id = 's-'+i; 
             div.className = 'item';
-            const stars = s.text.replace(/[^\s]/g, '*');
+            const stars = s.text.replace(/[^\\s]/g, '*');
             div.innerHTML = `
                 <div class="copy-group">
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}')">EN</button>
