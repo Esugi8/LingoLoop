@@ -163,7 +163,7 @@ if selected_video:
         .item.near {{ opacity: 0.8; }}
         .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
         .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
-        .en {{ font-weight: bold; font-size: 1.0em; line-height: 1.4; color: #000; pointer-events: none; }}
+        .en {{ font-weight: bold; font-size: 1.2em; line-height: 1.4; color: #000; pointer-events: none; }}
         .jp {{ font-size: 0.85em; color: #555; margin-top: 4px; pointer-events: none; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; pointer-events: none; }}
         .star-text {{ display: none; color: #888; letter-spacing: 1px; }}
