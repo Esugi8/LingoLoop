@@ -71,10 +71,6 @@ def save_to_spreadsheet(en, jp, video_name, memo):
 with st.sidebar:
     st.header("LingoLoop AI")
     
-    # 修正：和訳の表示切替トグルを追加
-    show_jp = st.toggle("和訳を表示", value=False)
-    st.divider()
-
     st.subheader("新規動画を追加")
     new_url = st.text_input("YouTube URL")
     new_folder_name = st.text_input("保存名 (空なら動画ID)")
@@ -127,9 +123,8 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML ---
     html_code = f"""
-    <div id="app-wrapper">
+    <div id="app-wrapper" class="hide-en hide-jp"> <!-- 初期状態は両方伏せ字 -->
         <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
@@ -138,6 +133,12 @@ if selected_video:
                 <button class="ctrl-btn" id="btn-prev">⏮</button>
                 <button class="ctrl-btn" id="btn-repeat">🔁 <span id="r-status">OFF</span></button>
                 <button class="ctrl-btn" id="btn-next">⏭</button>
+            </div>
+            <!-- 追加：表示切替トグルボタン -->
+            <div class="visibility-controls">
+                <button class="vis-btn" id="toggle-en-btn">英</button>
+                <button class="vis-btn" id="toggle-jp-btn">日</button>
+                <span class="vis-label">表示切替</span>
             </div>
         </div>
         <div id="transcript-scroll-area">
@@ -150,9 +151,17 @@ if selected_video:
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
         #video-header {{ flex-shrink: 0; background: #000; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
+        
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
+
+        /* 表示切替ボタンのスタイル */
+        .visibility-controls {{ display: flex; gap: 8px; padding: 6px 12px; background: #222; align-items: center; border-bottom: 1px solid #444; }}
+        .vis-btn {{ padding: 6px 16px; border: 1px solid #666; border-radius: 20px; background: #444; color: #aaa; font-weight: bold; cursor: pointer; transition: 0.2s; }}
+        .vis-btn.active {{ background: #2196f3; color: white; border-color: #2196f3; }}
+        .vis-label {{ color: #888; font-size: 0.8em; margin-left: 5px; }}
+
         #transcript-scroll-area {{ flex-grow: 1; overflow-y: scroll; background: #fff; -webkit-overflow-scrolling: touch; padding: 0 !important; margin: 0 !important; }}
         
         .item {{ 
@@ -166,29 +175,22 @@ if selected_video:
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
 
-        .copy-group {{
-            position: absolute; right: 5px; top: 8px;
-            display: flex; flex-direction: column; gap: 4px; z-index: 200;
-        }}
-        .mini-copy-btn {{
-            background: #eee; border: 1px solid #ccc; border-radius: 4px;
-            padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer;
-        }}
-        .mini-copy-btn:active {{ background: #2196f3; color: white; }}
+        .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
+        .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
 
-        /* 修正：和訳コピーボタンの表示制御 */
-        .btn-copy-jp {{
-            display: {'block' if show_jp else 'none'};
-        }}
+        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; transition: 0.2s; }}
+        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; transition: 0.2s; }}
+        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
 
-        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; pointer-events: none; }}
-        
-        .jp {{ 
-            font-size: 0.75em; color: #555; margin-top: 4px; pointer-events: none; 
-            display: {'block' if show_jp else 'none'};
-        }}
-        
-        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; pointer-events: none; }}
+        /* --- 伏せ字（黒塗りバー）のCSS --- */
+        /* 英語を隠す */
+        #app-wrapper.hide-en .en {{ background-color: #555; color: #555; border-radius: 4px; user-select: none; }}
+        #app-wrapper.hide-en .mini-copy-btn:first-child {{ display: none; }} /* 英語コピーボタンも隠す */
+
+        /* 日本語を隠す */
+        #app-wrapper.hide-jp .jp {{ background-color: #aaa; color: #aaa; border-radius: 4px; user-select: none; }}
+        #app-wrapper.hide-jp .mini-copy-btn:last-child {{ display: none; }} /* 日本語コピーボタンも隠す */
+
         @media (min-width: 600px) {{ #app-wrapper {{ flex-direction: row; }} #video-header {{ width: 70%; height: 100vh; }} #transcript-scroll-area {{ width: 30%; height: 100vh; }} }}
     </style>
     <script>
@@ -196,12 +198,26 @@ if selected_video:
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
         const ts = document.getElementById('transcript-scroll-area');
+        const wrapper = document.getElementById('app-wrapper');
         let currentIdx = -1; 
         let isRepeat = false;
 
         function copyText(txt) {{
             navigator.clipboard.writeText(txt);
         }}
+
+        // 表示切替ボタンのロジック
+        const btnEn = document.getElementById('toggle-en-btn');
+        const btnJp = document.getElementById('toggle-jp-btn');
+
+        btnEn.onclick = () => {{
+            const isHidden = wrapper.classList.toggle('hide-en');
+            btnEn.classList.toggle('active', !isHidden);
+        }};
+        btnJp.onclick = () => {{
+            const isHidden = wrapper.classList.toggle('hide-jp');
+            btnJp.classList.toggle('active', !isHidden);
+        }};
 
         data.forEach((s, i) => {{
             const div = document.createElement('div');
@@ -210,7 +226,7 @@ if selected_video:
             div.innerHTML = `
                 <div class="copy-group">
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}')">EN</button>
-                    <button class="mini-copy-btn btn-copy-jp" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
+                    <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
                 </div>
                 <div class="en">${{s.text}}</div>
                 <div class="jp">${{s.translation}}</div>
