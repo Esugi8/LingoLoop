@@ -111,8 +111,6 @@ def process_youtube_video(url, custom_folder_name=None):
     - 'end': 終了秒数（数値）。
     - 'text': 英語書き起こし。
     - 'translation': 自然な日本語訳。
-    - 'is_hard': 音声変化で聞き取りにくい箇所なら true。
-    - 'note': 音声変化の理由（日本語）。
     
     [厳守ルール]
     1. タイムスタンプは「秒数のみ」ではなく、必ず「分:秒.ミリ秒」の形式（例 "0:45.3"）で出力してください。
