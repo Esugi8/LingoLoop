@@ -124,7 +124,7 @@ if selected_video:
         })
 
     html_code = f"""
-    <div id="app-wrapper" class="hide-en hide-jp"> <!-- 初期状態は両方伏せ字 -->
+    <div id="app-wrapper" class="hide-en hide-jp"> <!-- 初期状態は両方隠す -->
         <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
@@ -134,7 +134,7 @@ if selected_video:
                 <button class="ctrl-btn" id="btn-repeat">🔁 <span id="r-status">OFF</span></button>
                 <button class="ctrl-btn" id="btn-next">⏭</button>
             </div>
-            <!-- 追加：表示切替トグルボタン -->
+            <!-- 表示切替トグルボタン -->
             <div class="visibility-controls">
                 <button class="vis-btn" id="toggle-en-btn">英</button>
                 <button class="vis-btn" id="toggle-jp-btn">日</button>
@@ -156,7 +156,6 @@ if selected_video:
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
 
-        /* 表示切替ボタンのスタイル */
         .visibility-controls {{ display: flex; gap: 8px; padding: 6px 12px; background: #222; align-items: center; border-bottom: 1px solid #444; }}
         .vis-btn {{ padding: 6px 16px; border: 1px solid #666; border-radius: 20px; background: #444; color: #aaa; font-weight: bold; cursor: pointer; transition: 0.2s; }}
         .vis-btn.active {{ background: #2196f3; color: white; border-color: #2196f3; }}
@@ -178,18 +177,17 @@ if selected_video:
         .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
         .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
 
-        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; transition: 0.2s; }}
-        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; transition: 0.2s; }}
+        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; display: block; }}
+        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; display: block; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
 
-        /* --- 伏せ字（黒塗りバー）のCSS --- */
-        /* 英語を隠す */
+        /* --- 英語：黒塗りバー（伏せ字） --- */
         #app-wrapper.hide-en .en {{ background-color: #555; color: #555; border-radius: 4px; user-select: none; }}
-        #app-wrapper.hide-en .mini-copy-btn:first-child {{ display: none; }} /* 英語コピーボタンも隠す */
+        #app-wrapper.hide-en .mini-copy-btn:first-child {{ display: none; }}
 
-        /* 日本語を隠す */
-        #app-wrapper.hide-jp .jp {{ background-color: #aaa; color: #aaa; border-radius: 4px; user-select: none; }}
-        #app-wrapper.hide-jp .mini-copy-btn:last-child {{ display: none; }} /* 日本語コピーボタンも隠す */
+        /* --- 和訳：単純な非表示 --- */
+        #app-wrapper.hide-jp .jp {{ display: none; }}
+        #app-wrapper.hide-jp .mini-copy-btn:last-child {{ display: none; }}
 
         @media (min-width: 600px) {{ #app-wrapper {{ flex-direction: row; }} #video-header {{ width: 70%; height: 100vh; }} #transcript-scroll-area {{ width: 30%; height: 100vh; }} }}
     </style>
@@ -206,7 +204,6 @@ if selected_video:
             navigator.clipboard.writeText(txt);
         }}
 
-        // 表示切替ボタンのロジック
         const btnEn = document.getElementById('toggle-en-btn');
         const btnJp = document.getElementById('toggle-jp-btn');
 
