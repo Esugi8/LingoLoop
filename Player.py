@@ -83,7 +83,7 @@ with st.sidebar:
                     st.rerun()
                 except Exception as e:
                     st.error(f"解析エラー: {e}")
-    
+
     st.divider()
     st.subheader("学習ライブラリ")
     videos = list_saved_videos()
@@ -114,7 +114,6 @@ if selected_video:
         video_base64 = base64.b64encode(video_data).decode()
         subtitles = json.loads(json_data.decode('utf-8'))
 
-    # JS用データ作成
     sub_data_js = []
     for i, s in enumerate(subtitles):
         prefix = "⚠️ " if s.get('is_hard') else ""
@@ -124,7 +123,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-    # ここから html_code の定義（if selected_video: の中に入れる）
+    # ここが html_code。if selected_video: のブロック内(半角4スペース)に正確に配置
     html_code = f"""
     <div id="app-wrapper" class="hide-en hide-jp">
         <div id="video-header">
@@ -158,16 +157,18 @@ if selected_video:
         .visibility-controls {{ display: flex; gap: 8px; padding: 6px 12px; background: #222; align-items: center; border-bottom: 1px solid #444; }}
         .vis-btn {{ padding: 6px 16px; border: 1px solid #666; border-radius: 20px; background: #444; color: #aaa; font-weight: bold; cursor: pointer; transition: 0.2s; }}
         .vis-btn.active {{ background: #2196f3; color: white; border-color: #2196f3; }}
-        #transcript-scroll-area {{ flex-grow: 1; overflow-y: scroll; background: #fff; -webkit-overflow-scrolling: touch; padding: 0 !important; margin: 0 !important; }}
+        #transcript-scroll-area {{ flex-grow: 1; overflow-y: scroll; background: #fff; -webkit-overflow-scrolling: touch; padding: 0 !important; margin: 0 !important; scroll-behavior: auto; }}
         .item {{ position: relative; padding: 12px 60px 12px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; box-sizing: border-box; opacity: 0.2; transition: opacity 0.3s; user-select: text; -webkit-user-select: text; }}
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
         .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
         .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
-        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; display: block; transition: 0.2s; }}
-        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; display: block; transition: 0.2s; }}
-        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
-        #app-wrapper.hide-en .en {{ background-color: #555; color: #555; border-radius: 4px; user-select: none; }}
+        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; pointer-events: none; }}
+        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; pointer-events: none; }}
+        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; pointer-events: none; }}
+        .star-text {{ display: none; color: #888; letter-spacing: 1px; }}
+        #app-wrapper.hide-en .real-text {{ display: none; }}
+        #app-wrapper.hide-en .star-text {{ display: inline; }}
         #app-wrapper.hide-en .mini-copy-btn:first-child {{ display: none; }}
         #app-wrapper.hide-jp .jp {{ display: none; }}
         #app-wrapper.hide-jp .mini-copy-btn:last-child {{ display: none; }}
@@ -192,13 +193,19 @@ if selected_video:
 
         data.forEach((s, i) => {{
             const div = document.createElement('div');
-            div.id = 's-'+i; div.className = 'item';
+            div.id = 's-'+i; 
+            div.className = 'item';
+            const stars = s.text.replace(/[^\s]/g, '*');
             div.innerHTML = `
                 <div class="copy-group">
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}')">EN</button>
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
                 </div>
-                <div class="en">${{s.text}}</div><div class="jp">${{s.translation}}</div>
+                <div class="en">
+                    <span class="real-text">${{s.text}}</span>
+                    <span class="star-text">${{stars}}</span>
+                </div>
+                <div class="jp">${{s.translation}}</div>
                 ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}
             `;
             div.onclick = () => jumpTo(i);
@@ -228,7 +235,6 @@ if selected_video:
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
         document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
-        
         const rBtn = document.getElementById('btn-repeat');
         rBtn.onclick = () => {{
             repeatMode = (repeatMode + 1) % 3;
@@ -246,10 +252,7 @@ if selected_video:
                     v.pause();
                     const waitTime = (repeatMode === 1) ? 1000 : 3000;
                     setTimeout(() => {{
-                        if (repeatMode > 0 && isWaiting) {{
-                            v.currentTime = s.start;
-                            v.play();
-                        }}
+                        if (repeatMode > 0 && isWaiting) {{ v.currentTime = s.start; v.play(); }}
                         isWaiting = false;
                     }}, waitTime);
                     return;
