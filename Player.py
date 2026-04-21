@@ -298,4 +298,4 @@ if selected_video:
         updateScroll(0);
     </script>
     """
-    st.iframe(html_code, height=1200)
+    st.iframe(html_code, height=800)
