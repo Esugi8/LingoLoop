@@ -105,25 +105,17 @@ with st.sidebar:
     
     selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
 
-# 動画が選択されたらデータを読み込む
-# 動画が選択されたらデータを読み込む
 if selected_video:
     with st.spinner("データを読み込んでいます..."):
         folder_id = selected_video['id']
         files = get_files_in_folder(folder_id)
-        
-        # JSONと動画のIDを特定
         video_id = next(f['id'] for f in files if 'video' in f['mimeType'])
         json_id = next(f['id'] for f in files if 'json' in f['mimeType'])
-        
-        # ダウンロード（メモリ上に保持）
         video_data = download_file(video_id)
         json_data = download_file(json_id)
-        
         video_base64 = base64.b64encode(video_data).decode()
         subtitles = json.loads(json_data.decode('utf-8'))
 
-    # JavaScript用のデータ作成
     sub_data_js = []
     for i, s in enumerate(subtitles):
         prefix = "⚠️ " if s.get('is_hard') else ""
@@ -133,10 +125,11 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-    # --- プレイヤー HTML (ここが if ブロックの内側にある必要があります) ---
+    # --- プレイヤー HTML (ビデオと字幕を完全に分離) ---
     html_code = f"""
     <div id="app-wrapper">
-        <div id="video-header">
+        <!-- 上部：ビデオウィンドウ（固定） -->
+        <div id="video-area">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
             </video>
@@ -150,33 +143,48 @@ if selected_video:
             </div>
         </div>
         
+        <!-- 下部：字幕ウィンドウ（ビデオの直下から始まり、独自にスクロール） -->
         <div id="transcript-container">
             <div id="sl"></div>
-            <div style="height: 600px;"></div>
+            <div style="height: 600px;"></div> <!-- 下部余白 -->
         </div>
     </div>
 
     <style>
         body, html {{ 
             margin: 0; padding: 0; height: 100vh; width: 100vw;
-            overflow: hidden; font-family: sans-serif; background: #fff;
+            overflow: hidden; font-family: sans-serif; background: #000;
         }}
-        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
-        #video-header {{ flex-shrink: 0; background: #000; z-index: 1000; }}
+        
+        /* 画面全体を縦に2分割する設定 */
+        #app-wrapper {{ 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            width: 100vw; 
+        }}
+        
+        /* ビデオエリアの設定 */
+        #video-area {{ 
+            flex-shrink: 0; /* サイズを固定 */
+            background: #000; 
+            z-index: 10; 
+        }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
+        
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
-        .jp-toggle-bar {{ padding: 6px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
+        .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
+        /* 字幕ウィンドウの設定：ビデオの下に固定される */
         #transcript-container {{
-            flex-grow: 1;
-            overflow-y: scroll;
+            flex-grow: 1; /* 残りの画面スペースをすべて使う */
+            overflow-y: scroll; /* このエリア内だけでスクロール */
             background: #fff;
             -webkit-overflow-scrolling: touch;
             padding: 0 !important;
             margin: 0 !important;
-            scroll-behavior: auto !important; 
         }}
 
         .item {{ 
@@ -187,8 +195,13 @@ if selected_video:
             opacity: 0.3;
             transition: opacity 0.3s;
         }}
-        .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
+        .item.active {{ 
+            background: #fff9c4 !important; 
+            border-left: 8px solid #2196f3; 
+            opacity: 1; 
+        }}
         .item.near {{ opacity: 0.8; }}
+        
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
@@ -196,7 +209,7 @@ if selected_video:
 
         @media (min-width: 600px) {{
             #app-wrapper {{ flex-direction: row; }}
-            #video-header {{ width: 70%; height: 100vh; }}
+            #video-area {{ width: 70%; height: 100vh; }}
             #transcript-container {{ width: 30%; height: 100vh; }}
         }}
     </style>
@@ -231,6 +244,7 @@ if selected_video:
                 }}
             }});
 
+            // 字幕ウィンドウ（ts）の最上部を、1つ前の文の上端に合わせる
             if (idx === 0) {{
                 ts.scrollTop = 0;
             }} else {{
@@ -284,5 +298,4 @@ if selected_video:
         updateScroll(0);
     </script>
     """
-    # インデントを下げて if ブロックの中に入れました
     st.iframe(html_code, height=1200)
