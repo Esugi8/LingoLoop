@@ -6,6 +6,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
+from datetime import datetime # 追加
 # --- Script.py から関数をインポート ---
 from Script import process_youtube_video
 
@@ -13,7 +14,9 @@ from Script import process_youtube_video
 APP_NAME = "LingoLoop AI"
 TOKEN_FILE = 'token.json'
 DRIVE_FOLDER_ID = '1S1c7T0qe1e84xDvEZsZBQuFRbLREph1C' # Script.pyと同じもの
-SCOPES = ['https://www.googleapis.com/auth/drive']
+SCOPES = ['https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/spreadsheets'
+    ]
 
 st.set_page_config(page_title=APP_NAME, layout="wide")
 
@@ -36,6 +39,28 @@ def list_saved_videos():
         fields="files(id, name)"
     ).execute()
     return results.get('files', [])
+    
+# スプレッドシート保存関数
+def save_to_spreadsheet(en, jp, video_name, memo):
+    try:
+        service = get_google_service('sheets', 'v4')
+        spreadsheet_id = st.secrets["SPREADSHEET_ID"]
+        range_name = 'シート1!A2' # 「シート1」は実際のシート名に合わせてください
+        
+        values = [[en, jp, video_name, memo, datetime.now().strftime("%Y-%m-%d %H:%M")]]
+        body = {'values': values}
+        
+        service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range=range_name,
+            valueInputOption='USER_ENTERED',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+        return True
+    except Exception as e:
+        st.error(f"スプレッドシート保存エラー: {e}")
+        return False
 
 def get_files_in_folder(folder_id):
     service = get_drive_service()
@@ -96,6 +121,22 @@ with st.sidebar:
             st.warning("URLを入力してください")
 
     st.divider()
+    
+        # 単語帳登録セクション
+    st.subheader("📓 単語帳に保存")
+    with st.form("word_form", clear_on_submit=True):
+        new_en = st.text_input("英語表現")
+        new_jp = st.text_input("日本語訳")
+        new_memo = st.text_area("メモ (任意)", height=60)
+        submit = st.form_submit_button("スプレッドシートに保存")
+        
+        if submit:
+            if new_en and new_jp:
+                v_name = selected_video['name'] if selected_video else "Unknown"
+                if save_to_spreadsheet(new_en, new_jp, v_name, new_memo):
+                    st.success("保存しました！")
+            else:
+                st.warning("英語と日本語の両方を入力してください")
 
     # --- 学習ライブラリセクション ---
     st.header("学習ライブラリ")
@@ -106,29 +147,10 @@ with st.sidebar:
     selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
 
 if selected_video:
-    with st.spinner("データを読み込んでいます..."):
-        folder_id = selected_video['id']
-        files = get_files_in_folder(folder_id)
-        video_id = next(f['id'] for f in files if 'video' in f['mimeType'])
-        json_id = next(f['id'] for f in files if 'json' in f['mimeType'])
-        video_data = download_file(video_id)
-        json_data = download_file(json_id)
-        video_base64 = base64.b64encode(video_data).decode()
-        subtitles = json.loads(json_data.decode('utf-8'))
-
-    sub_data_js = []
-    for i, s in enumerate(subtitles):
-        prefix = "⚠️ " if s.get('is_hard') else ""
-        sub_data_js.append({
-            "id": i, "start": s['start'], "end": s['end'],
-            "text": prefix + s['text'], "translation": s['translation'],
-            "note": s.get('note', '')
-        })
-
-    # --- プレイヤー HTML (承認済み構成) ---
+    # (video_base64, sub_data_js の生成)
+    
     html_code = f"""
     <div id="app-wrapper">
-        <!-- 上部：ビデオエリア（固定） -->
         <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
                 <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
@@ -143,10 +165,9 @@ if selected_video:
             </div>
         </div>
         
-        <!-- 下部：字幕エリア（ビデオの直下から開始） -->
-        <div id="transcript-scroll-area">
-            <div id="sl" style="position: relative; padding: 0; margin: 0;"></div>
-            <div style="height: 100vh;"></div> <!-- スクロール余白 -->
+        <div id="transcript-container">
+            <div id="sl"></div>
+            <div style="height: 100vh;"></div>
         </div>
     </div>
 
@@ -155,50 +176,39 @@ if selected_video:
             margin: 0; padding: 0; height: 100vh; width: 100vw;
             overflow: hidden; font-family: sans-serif; background: #fff;
         }}
-        
-        #app-wrapper {{ 
-            display: flex; flex-direction: column; height: 100vh; 
-        }}
-        
-        #video-header {{ 
-            flex-shrink: 0; background: #000; z-index: 100;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }}
+        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
+        #video-header {{ flex-shrink: 0; background: #000; z-index: 10; }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
-        
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
 
-        #transcript-scroll-area {{
-            flex-grow: 1; /* ビデオの下の全領域を占める */
+        #transcript-container {{
+            flex-grow: 1;
             overflow-y: scroll;
             background: #fff;
             -webkit-overflow-scrolling: touch;
             padding: 0 !important;
             margin: 0 !important;
+            scroll-behavior: auto !important; 
         }}
 
         .item {{ 
             padding: 12px 15px; 
-            border-bottom: 1px solid #f0f0f0; 
+            border-bottom: 1px solid #eee; 
             cursor: pointer;
             box-sizing: border-box;
-            opacity: 0.2; /* 基本は薄く */
-            transition: opacity 0.3s;
+            margin: 0;
+            opacity: 0.3;
+            transition: opacity 0.3s, background 0.3s;
+            /* 修正：テキストを長押しで選択可能にする */
+            user-select: text;
+            -webkit-user-select: text;
         }}
-        
-        /* 現在の文：2番目に配置される */
-        .item.active {{ 
-            background: #fff9c4 !important; 
-            border-left: 8px solid #2196f3; 
-            opacity: 1;
-        }}
-        
-        /* 前後の文 */
+        .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
-
+        
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
@@ -207,7 +217,7 @@ if selected_video:
         @media (min-width: 600px) {{
             #app-wrapper {{ flex-direction: row; }}
             #video-header {{ width: 70%; height: 100vh; }}
-            #transcript-scroll-area {{ width: 30%; height: 100vh; }}
+            #transcript-container {{ width: 30%; height: 100vh; }}
         }}
     </style>
 
