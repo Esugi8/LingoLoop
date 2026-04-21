@@ -123,7 +123,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-    html_code = f"""
+     html_code = f"""
     <div id="app-wrapper" class="hide-en hide-jp">
         <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
@@ -146,18 +146,16 @@ if selected_video:
         </div>
     </div>
     <style>
-        /* (CSS部分は変更なし) */
         body, html {{ margin: 0; padding: 0; height: 100vh; width: 100vw; overflow: hidden; font-family: sans-serif; background: #fff; }}
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
         #video-header {{ flex-shrink: 0; background: #000; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.1em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         .visibility-controls {{ display: flex; gap: 8px; padding: 6px 12px; background: #222; align-items: center; border-bottom: 1px solid #444; }}
         .vis-btn {{ padding: 6px 16px; border: 1px solid #666; border-radius: 20px; background: #444; color: #aaa; font-weight: bold; cursor: pointer; transition: 0.2s; }}
         .vis-btn.active {{ background: #2196f3; color: white; border-color: #2196f3; }}
-        .vis-label {{ color: #888; font-size: 0.8em; margin-left: 5px; }}
         #transcript-scroll-area {{ flex-grow: 1; overflow-y: scroll; background: #fff; -webkit-overflow-scrolling: touch; padding: 0 !important; margin: 0 !important; }}
         .item {{ position: relative; padding: 12px 60px 12px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; box-sizing: border-box; opacity: 0.2; transition: opacity 0.3s; user-select: text; -webkit-user-select: text; }}
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
@@ -180,12 +178,10 @@ if selected_video:
         const ts = document.getElementById('transcript-scroll-area');
         const wrapper = document.getElementById('app-wrapper');
         let currentIdx = -1; 
-        let isRepeat = false;
-        let isWaiting = false; // 修正：1秒待機フラグ
+        let repeatMode = 0; // 0:OFF, 1:1s(Listening), 2:3s(Practice)
+        let isWaiting = false;
 
-        function copyText(txt) {{
-            navigator.clipboard.writeText(txt);
-        }}
+        function copyText(txt) {{ navigator.clipboard.writeText(txt); }}
 
         const btnEn = document.getElementById('toggle-en-btn');
         const btnJp = document.getElementById('toggle-jp-btn');
@@ -200,8 +196,7 @@ if selected_video:
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}')">EN</button>
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
                 </div>
-                <div class="en">${{s.text}}</div>
-                <div class="jp">${{s.translation}}</div>
+                <div class="en">${{s.text}}</div><div class="jp">${{s.translation}}</div>
                 ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}
             `;
             div.onclick = () => jumpTo(i);
@@ -222,7 +217,7 @@ if selected_video:
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
-            isWaiting = false; // 修正：ジャンプ時は待機をキャンセル
+            isWaiting = false;
             currentIdx = idx;
             v.currentTime = data[idx].start;
             v.play();
@@ -231,25 +226,33 @@ if selected_video:
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
         document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
+        
+        // 修正：リピートボタンのサイクル切り替え
         const rBtn = document.getElementById('btn-repeat');
-        rBtn.onclick = () => {{ isRepeat = !isRepeat; rBtn.classList.toggle('active', isRepeat); document.getElementById('r-status').innerText = isRepeat ? "ON" : "OFF"; }};
+        rBtn.onclick = () => {{
+            repeatMode = (repeatMode + 1) % 3;
+            rBtn.classList.toggle('active', repeatMode > 0);
+            const labels = ["OFF", "1s (聴)", "3s (練)"];
+            document.getElementById('r-status').innerText = labels[repeatMode];
+        }};
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
             
-            // 修正：リピート再生時の「1秒待機」ロジック
-            if (isRepeat && currentIdx !== -1 && !isWaiting) {{
+            // 修正：repeatModeに応じた待機時間の切り替え
+            if (repeatMode > 0 && currentIdx !== -1 && !isWaiting) {{
                 const s = data[currentIdx];
                 if (now >= s.end - 0.05) {{
                     isWaiting = true;
                     v.pause();
+                    const waitTime = (repeatMode === 1) ? 1000 : 3000;
                     setTimeout(() => {{
-                        if (isRepeat && isWaiting) {{ // まだリピート設定かつ待機中なら
+                        if (repeatMode > 0 && isWaiting) {{
                             v.currentTime = s.start;
                             v.play();
                         }}
                         isWaiting = false;
-                    }}, 1000); // 1000ms = 1秒
+                    }}, waitTime);
                     return;
                 }}
             }}
