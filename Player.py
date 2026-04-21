@@ -121,7 +121,7 @@ if selected_video:
         
         video_base64 = base64.b64encode(video_data).decode()
         subtitles = json.loads(json_data.decode('utf-8'))
-        
+
 # --- プレイヤー HTML (合意に基づき、アップロードファイルをベースに改良) ---
     html_code = f"""
     <div id="app-wrapper">
