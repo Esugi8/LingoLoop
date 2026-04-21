@@ -1,3 +1,136 @@
+import streamlit as st
+import json
+import os
+import base64
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
+from datetime import datetime
+# --- Script.py から関数をインポート ---
+from Script import process_youtube_video
+
+# --- 設定 ---
+APP_NAME = "LingoLoop AI"
+DRIVE_FOLDER_ID = '1S1c7T0qe1e84xDvEZsZBQuFRbLREph1C' 
+SCOPES = [
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/spreadsheets'
+]
+
+st.set_page_config(page_title=APP_NAME, layout="wide")
+
+# --- Google 連携関数 ---
+def get_google_service(service_name, version):
+    token_info = st.secrets["google_drive_token"]
+    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
+    return build(service_name, version, credentials=creds)
+
+def list_saved_videos():
+    service = get_google_service('drive', 'v3')
+    results = service.files().list(
+        q=f"'{DRIVE_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        fields="files(id, name)"
+    ).execute()
+    return results.get('files', [])
+
+def get_files_in_folder(folder_id):
+    service = get_google_service('drive', 'v3')
+    results = service.files().list(
+        q=f"'{folder_id}' in parents",
+        fields="files(id, name, mimeType)"
+    ).execute()
+    return results.get('files', [])
+
+def download_file(file_id):
+    service = get_google_service('drive', 'v3')
+    request = service.files().get_media(fileId=file_id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    return fh.getvalue()
+
+def save_to_spreadsheet(en, jp, video_name, memo):
+    try:
+        service = get_google_service('sheets', 'v4')
+        spreadsheet_id = st.secrets["SPREADSHEET_ID"]
+        range_name = 'シート1!A2'
+        values = [[en, jp, video_name, memo, datetime.now().strftime("%Y-%m-%d %H:%M")]]
+        body = {'values': values}
+        service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id, range=range_name,
+            valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body=body
+        ).execute()
+        return True
+    except Exception as e:
+        st.error(f"スプレッドシート保存エラー: {e}")
+        return False
+
+# --- サイドバー UI ---
+with st.sidebar:
+    st.header("LingoLoop AI")
+    
+    # --- 1. 【復元】新規動画の追加セクション ---
+    st.subheader("新規動画を追加")
+    new_url = st.text_input("YouTube URL")
+    new_folder_name = st.text_input("保存名 (空なら動画ID)")
+    if st.button("解析開始"):
+        if new_url:
+            with st.spinner("解析中... 数分かかります"):
+                try:
+                    process_youtube_video(new_url, new_folder_name)
+                    st.success("解析完了！")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"解析エラー: {e}")
+        else:
+            st.warning("URLを入力してください")
+
+    st.divider()
+
+    # --- 2. 学習ライブラリセクション ---
+    st.subheader("学習ライブラリ")
+    videos = list_saved_videos()
+    selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
+    
+    st.divider()
+
+    # --- 3. 単語帳登録セクション ---
+    st.subheader("📓 単語帳に保存")
+    with st.form("word_form", clear_on_submit=True):
+        new_en = st.text_input("英語表現")
+        new_jp = st.text_input("日本語訳")
+        new_memo = st.text_area("メモ (任意)", height=60)
+        submit = st.form_submit_button("保存")
+        if submit:
+            if new_en and new_jp:
+                v_name = selected_video['name'] if selected_video else "Unknown"
+                if save_to_spreadsheet(new_en, new_jp, v_name, new_memo):
+                    st.success("保存しました！")
+
+# --- メインエリア ---
+if selected_video:
+    with st.spinner("データを読み込んでいます..."):
+        folder_id = selected_video['id']
+        files = get_files_in_folder(folder_id)
+        video_id = next(f['id'] for f in files if 'video' in f['mimeType'])
+        json_id = next(f['id'] for f in files if 'json' in f['mimeType'])
+        video_data = download_file(video_id)
+        json_data = download_file(json_id)
+        video_base64 = base64.b64encode(video_data).decode()
+        subtitles = json.loads(json_data.decode('utf-8'))
+
+    sub_data_js = []
+    for i, s in enumerate(subtitles):
+        prefix = "⚠️ " if s.get('is_hard') else ""
+        sub_data_js.append({
+            "id": i, "start": s['start'], "end": s['end'],
+            "text": prefix + s['text'], "translation": s['translation'],
+            "note": s.get('note', '')
+        })
+
 # --- プレイヤー HTML (1クリックコピー機能追加) ---
     html_code = f"""
     <div id="app-wrapper">
