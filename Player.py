@@ -1,3 +1,138 @@
+import streamlit as st
+import json
+import os
+import base64
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
+# --- Script.py から関数をインポート ---
+from Script import process_youtube_video
+
+# --- 設定 ---
+APP_NAME = "LingoLoop AI"
+TOKEN_FILE = 'token.json'
+DRIVE_FOLDER_ID = '1S1c7T0qe1e84xDvEZsZBQuFRbLREph1C' # Script.pyと同じもの
+SCOPES = ['https://www.googleapis.com/auth/drive']
+
+st.set_page_config(page_title=APP_NAME, layout="wide")
+
+# --- Google Drive 連携関数 ---
+# def get_drive_service():
+    # creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # return build('drive', 'v3', credentials=creds)
+    
+def get_drive_service():
+    # ファイルからではなく、Secretsの辞書から認証情報を生成
+    token_info = st.secrets["google_drive_token"]
+    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
+    return build('drive', 'v3', credentials=creds)
+
+def list_saved_videos():
+    service = get_drive_service()
+    # 親フォルダ内のフォルダ（動画ID）一覧を取得 (ゴミ箱を除外)
+    results = service.files().list(
+        q=f"'{DRIVE_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        fields="files(id, name)"
+    ).execute()
+    return results.get('files', [])
+
+def get_files_in_folder(folder_id):
+    service = get_drive_service()
+    results = service.files().list(
+        q=f"'{folder_id}' in parents",
+        fields="files(id, name, mimeType)"
+    ).execute()
+    return results.get('files', [])
+
+def download_file(file_id):
+    service = get_drive_service()
+    request = service.files().get_media(fileId=file_id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    return fh.getvalue()
+
+# --- メイン UI ---
+# タイトル (st.title) は削除
+
+# Streamlit自体の余白を消すための魔法のCSS
+# st.markdown("""
+    # <style>
+        # /* メインコンテンツのパディングをゼロにする */
+        # .block-container {
+            # padding-top: 0rem;
+            # padding-bottom: 0rem;
+            # padding-left: 0rem;
+            # padding-right: 0rem;
+        # }
+        # /* ヘッダー（右上のメニューなど）を隠す */
+        # header {visibility: hidden;}
+        # /* フッターを隠す */
+        # footer {visibility: hidden;}
+    # </style>
+    # """, unsafe_allow_html=True)
+
+# サイドバーの設定
+with st.sidebar:
+    st.header("LingoLoop AI") # サイドバーに名前を移動
+    # --- 新規動画の追加セクション ---
+    st.header("新規動画を追加")
+    new_url = st.text_input("YouTube URL")
+    new_folder_name = st.text_input("保存名 (空なら動画ID)")
+    
+    if st.button("解析開始"):
+        if new_url:
+            with st.spinner("解析中... 数分かかります"):
+                try:
+                    process_youtube_video(new_url, new_folder_name)
+                    st.success("解析完了！")
+                    st.rerun() # リストを更新するために再起動
+                except Exception as e:
+                    st.error(f"解析エラー: {e}")
+        else:
+            st.warning("URLを入力してください")
+
+    st.divider()
+
+    # --- 学習ライブラリセクション ---
+    st.header("学習ライブラリ")
+    videos = list_saved_videos()
+    if not videos:
+        st.write("保存された動画がありません。")
+    
+    selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
+
+# 動画が選択されたらデータを読み込む
+if selected_video:
+    with st.spinner("データを読み込んでいます..."):
+        folder_id = selected_video['id']
+        files = get_files_in_folder(folder_id)
+        
+        # JSONと動画のIDを特定
+        video_id = next(f['id'] for f in files if 'video' in f['mimeType'])
+        json_id = next(f['id'] for f in files if 'json' in f['mimeType'])
+        
+        # ダウンロード（メモリ上に保持）
+        video_data = download_file(video_id)
+        json_data = download_file(json_id)
+        
+        video_base64 = base64.b64encode(video_data).decode()
+        subtitles = json.loads(json_data.decode('utf-8'))
+
+    # JavaScript用のデータ作成
+    sub_data_js = []
+    for i, s in enumerate(subtitles):
+        # Geminiが判定した「難しい箇所」にアイコンをつける
+        prefix = "⚠️ " if s.get('is_hard') else ""
+        sub_data_js.append({
+            "id": i, "start": s['start'], "end": s['end'],
+            "text": prefix + s['text'], "translation": s['translation'],
+            "note": s.get('note', '')
+        })
+
 # --- プレイヤー HTML (全スクロール・2番目表示維持・ジャンプ改善版) ---
     html_code = f"""
     <div id="app-wrapper">
@@ -173,4 +308,4 @@
         updateDisplay(0);
     </script>
     """
-    st.components.v1.html(html_code, height=1200)
+    st.iframe(html_code, height=1200)
