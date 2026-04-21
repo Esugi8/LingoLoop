@@ -7,7 +7,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
 from datetime import datetime
-# --- Script.py から関数をインポート ---
 from Script import process_youtube_video
 
 # --- 設定 ---
@@ -72,7 +71,6 @@ def save_to_spreadsheet(en, jp, video_name, memo):
 with st.sidebar:
     st.header("LingoLoop AI")
     
-    # --- 1. 【復元】新規動画の追加セクション ---
     st.subheader("新規動画を追加")
     new_url = st.text_input("YouTube URL")
     new_folder_name = st.text_input("保存名 (空なら動画ID)")
@@ -85,19 +83,13 @@ with st.sidebar:
                     st.rerun()
                 except Exception as e:
                     st.error(f"解析エラー: {e}")
-        else:
-            st.warning("URLを入力してください")
-
+    
     st.divider()
-
-    # --- 2. 学習ライブラリセクション ---
     st.subheader("学習ライブラリ")
     videos = list_saved_videos()
     selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
     
     st.divider()
-
-    # --- 3. 単語帳登録セクション ---
     st.subheader("📓 単語帳に保存")
     with st.form("word_form", clear_on_submit=True):
         new_en = st.text_input("英語表現")
@@ -131,7 +123,6 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-# --- プレイヤー HTML (1クリックコピー機能追加) ---
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-header">
@@ -154,8 +145,8 @@ if selected_video:
     </div>
     <style>
         body, html {{ margin: 0; padding: 0; height: 100vh; width: 100vw; overflow: hidden; font-family: sans-serif; background: #fff; }}
-        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; }}
-        #video-header {{ flex-shrink: 0; background: #000; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
+        #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
+        #video-header {{ flex-shrink: 0; background: #000; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
@@ -165,31 +156,25 @@ if selected_video:
         
         .item {{ 
             position: relative;
-            padding: 12px 40px 12px 15px; /* 右側にボタン用の余白を作成 */
+            padding: 12px 60px 12px 15px; /* 右側にボタン2つ分の余白 */
             border-bottom: 1px solid #f0f0f0; 
-            cursor: pointer; 
-            box-sizing: border-box; 
-            opacity: 0.2; 
-            transition: opacity 0.3s; 
+            cursor: pointer; box-sizing: border-box; 
+            opacity: 0.2; transition: opacity 0.3s;
+            user-select: text; -webkit-user-select: text;
         }}
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
-        
-        /* コピーボタンのスタイル */
-        .copy-btn {{
-            position: absolute;
-            right: 10px;
-            top: 10px;
-            background: #eee;
-            border: none;
-            border-radius: 4px;
-            padding: 5px 8px;
-            font-size: 1.2em;
-            cursor: pointer;
-            opacity: 0.5;
-            z-index: 200;
+
+        /* コピーボタン用グループ */
+        .copy-group {{
+            position: absolute; right: 5px; top: 8px;
+            display: flex; flex-direction: column; gap: 4px; z-index: 200;
         }}
-        .copy-btn:active {{ background: #2196f3; color: white; opacity: 1; }}
+        .mini-copy-btn {{
+            background: #eee; border: 1px solid #ccc; border-radius: 4px;
+            padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer;
+        }}
+        .mini-copy-btn:active {{ background: #2196f3; color: white; }}
 
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; pointer-events: none; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; pointer-events: none; }}
@@ -205,21 +190,19 @@ if selected_video:
         let currentIdx = -1; 
         let isRepeat = false;
 
-        // クリップボードにコピーする関数
-        function copyText(en, jp) {{
-            const text = en; // 保存したいのは主に英語なので英語をコピー
-            navigator.clipboard.writeText(text).then(() => {{
-                // 成功したらボタンを一瞬青くするなどのフィードバック（任意）
-            }});
+        function copyText(txt) {{
+            navigator.clipboard.writeText(txt);
         }}
 
         data.forEach((s, i) => {{
             const div = document.createElement('div');
             div.id = 's-'+i; 
             div.className = 'item';
-            // コピーボタンを追加。クリックイベントがjumpToと被らないように stopPropagation を使用
             div.innerHTML = `
-                <button class="copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}', '${{s.translation.replace(/'/g, "\\'")}}')">📋</button>
+                <div class="copy-group">
+                    <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}')">EN</button>
+                    <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
+                </div>
                 <div class="en">${{s.text}}</div>
                 <div class="jp">${{s.translation}}</div>
                 ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}
@@ -228,7 +211,7 @@ if selected_video:
             sl.appendChild(div);
         }});
 
-        function updateScroll(idx) {{
+        function updateDisplay(idx) {{
             if (idx < 0) return;
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
@@ -245,7 +228,7 @@ if selected_video:
             currentIdx = idx;
             v.currentTime = data[idx].start;
             v.play();
-            updateScroll(idx);
+            updateDisplay(idx);
         }}
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
@@ -268,7 +251,7 @@ if selected_video:
                 }}
             }}
         }});
-        updateScroll(0);
+        updateDisplay(0);
     </script>
     """
     st.iframe(html_code, height=1200)
