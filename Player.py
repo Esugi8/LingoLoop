@@ -15,8 +15,8 @@ APP_NAME = "LingoLoop AI"
 TOKEN_FILE = 'token.json'
 DRIVE_FOLDER_ID = '1S1c7T0qe1e84xDvEZsZBQuFRbLREph1C' # Script.pyと同じもの
 SCOPES = ['https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/spreadsheets'
-    ]
+'https://www.googleapis.com/auth/spreadsheets'
+]
 
 st.set_page_config(page_title=APP_NAME, layout="wide")
 
@@ -45,7 +45,7 @@ def save_to_spreadsheet(en, jp, video_name, memo):
     try:
         service = get_google_service('sheets', 'v4')
         spreadsheet_id = st.secrets["SPREADSHEET_ID"]
-        range_name = 'シート1!A2' # 「シート1」は実際のシート名に合わせてください
+        range_name = 'LingoLoop_Phrases!A2' # 「シート1」は実際のシート名に合わせてください
         
         values = [[en, jp, video_name, memo, datetime.now().strftime("%Y-%m-%d %H:%M")]]
         body = {'values': values}
