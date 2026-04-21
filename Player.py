@@ -71,6 +71,10 @@ def save_to_spreadsheet(en, jp, video_name, memo):
 with st.sidebar:
     st.header("LingoLoop AI")
     
+    # 修正：和訳の表示切替トグルを追加
+    show_jp = st.toggle("和訳を表示", value=True)
+    st.divider()
+
     st.subheader("新規動画を追加")
     new_url = st.text_input("YouTube URL")
     new_folder_name = st.text_input("保存名 (空なら動画ID)")
@@ -123,6 +127,7 @@ if selected_video:
             "note": s.get('note', '')
         })
 
+# --- プレイヤー HTML ---
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-header">
@@ -133,9 +138,6 @@ if selected_video:
                 <button class="ctrl-btn" id="btn-prev">⏮</button>
                 <button class="ctrl-btn" id="btn-repeat">🔁 <span id="r-status">OFF</span></button>
                 <button class="ctrl-btn" id="btn-next">⏭</button>
-            </div>
-            <div class="jp-toggle-bar">
-                <label><input type="checkbox" id="toggle-jp" checked> 日本語訳を表示</label>
             </div>
         </div>
         <div id="transcript-scroll-area">
@@ -151,12 +153,11 @@ if selected_video:
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
-        .jp-toggle-bar {{ padding: 8px 12px; font-size: 0.8em; color: #ccc; background: #222; border-bottom: 1px solid #444; }}
         #transcript-scroll-area {{ flex-grow: 1; overflow-y: scroll; background: #fff; -webkit-overflow-scrolling: touch; padding: 0 !important; margin: 0 !important; }}
         
         .item {{ 
             position: relative;
-            padding: 12px 60px 12px 15px; /* 右側にボタン2つ分の余白 */
+            padding: 12px 60px 12px 15px;
             border-bottom: 1px solid #f0f0f0; 
             cursor: pointer; box-sizing: border-box; 
             opacity: 0.2; transition: opacity 0.3s;
@@ -165,7 +166,6 @@ if selected_video:
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
 
-        /* コピーボタン用グループ */
         .copy-group {{
             position: absolute; right: 5px; top: 8px;
             display: flex; flex-direction: column; gap: 4px; z-index: 200;
@@ -176,10 +176,19 @@ if selected_video:
         }}
         .mini-copy-btn:active {{ background: #2196f3; color: white; }}
 
+        /* 修正：和訳コピーボタンの表示制御 */
+        .btn-copy-jp {{
+            display: {'block' if show_jp else 'none'};
+        }}
+
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; pointer-events: none; }}
-        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; pointer-events: none; }}
+        
+        .jp {{ 
+            font-size: 0.75em; color: #555; margin-top: 4px; pointer-events: none; 
+            display: {'block' if show_jp else 'none'};
+        }}
+        
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; pointer-events: none; }}
-        .hidden {{ display: none !important; }}
         @media (min-width: 600px) {{ #app-wrapper {{ flex-direction: row; }} #video-header {{ width: 70%; height: 100vh; }} #transcript-scroll-area {{ width: 30%; height: 100vh; }} }}
     </style>
     <script>
@@ -201,7 +210,7 @@ if selected_video:
             div.innerHTML = `
                 <div class="copy-group">
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.text.replace(/'/g, "\\'")}}')">EN</button>
-                    <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
+                    <button class="mini-copy-btn btn-copy-jp" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
                 </div>
                 <div class="en">${{s.text}}</div>
                 <div class="jp">${{s.translation}}</div>
@@ -235,7 +244,6 @@ if selected_video:
         document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
         const rBtn = document.getElementById('btn-repeat');
         rBtn.onclick = () => {{ isRepeat = !isRepeat; rBtn.classList.toggle('active', isRepeat); document.getElementById('r-status').innerText = isRepeat ? "ON" : "OFF"; }};
-        document.getElementById('toggle-jp').onchange = (e) => {{ document.querySelectorAll('.jp').forEach(el => el.classList.toggle('hidden', !e.target.checked)); }};
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
