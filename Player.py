@@ -146,9 +146,35 @@ with st.sidebar:
     
     selected_video = st.selectbox("動画を選択", videos, format_func=lambda x: x['name'])
 
+# (上部の import や関数定義は維持)
+
+# --- 動画が選択された時の処理 ---
 if selected_video:
-    # (video_base64, sub_data_js の生成)
-    
+    with st.spinner("データを読み込んでいます..."):
+        folder_id = selected_video['id']
+        files = get_files_in_folder(folder_id)
+        
+        video_id = next(f['id'] for f in files if 'video' in f['mimeType'])
+        json_id = next(f['id'] for f in files if 'json' in f['mimeType'])
+        
+        video_data = download_file(video_id)
+        json_data = download_file(json_id)
+        
+        video_base64 = base64.b64encode(video_data).decode()
+        subtitles = json.loads(json_data.decode('utf-8'))
+
+    # JS用データ作成 (if の中)
+    sub_data_js = []
+    for i, s in enumerate(subtitles):
+        prefix = "⚠️ " if s.get('is_hard') else ""
+        sub_data_js.append({
+            "id": i, "start": s['start'], "end": s['end'],
+            "text": prefix + s['text'], "translation": s['translation'],
+            "note": s.get('note', '')
+        })
+
+    # --- プレイヤー HTML (ここも if の中に入れる必要があります) ---
+    # 波括弧 { } はすべて {{ }} に二重化しています
     html_code = f"""
     <div id="app-wrapper">
         <div id="video-header">
@@ -177,7 +203,7 @@ if selected_video:
             overflow: hidden; font-family: sans-serif; background: #fff;
         }}
         #app-wrapper {{ display: flex; flex-direction: column; height: 100vh; width: 100vw; }}
-        #video-header {{ flex-shrink: 0; background: #000; z-index: 10; }}
+        #video-header {{ flex-shrink: 0; background: #000; z-index: 1000; }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
         .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
@@ -199,16 +225,13 @@ if selected_video:
             border-bottom: 1px solid #eee; 
             cursor: pointer;
             box-sizing: border-box;
-            margin: 0;
             opacity: 0.3;
             transition: opacity 0.3s, background 0.3s;
-            /* 修正：テキストを長押しで選択可能にする */
             user-select: text;
             -webkit-user-select: text;
         }}
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
-        
         .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; }}
         .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
@@ -225,7 +248,7 @@ if selected_video:
         const data = {json.dumps(sub_data_js)};
         const v = document.getElementById('v');
         const sl = document.getElementById('sl');
-        const ts = document.getElementById('transcript-scroll-area');
+        const ts = document.getElementById('transcript-container');
         let currentIdx = -1; 
         let isRepeat = false;
 
@@ -240,7 +263,7 @@ if selected_video:
             sl.appendChild(div);
         }});
 
-        function updateDisplay(idx) {{
+        function updateScroll(idx) {{
             if (idx < 0) return;
             const items = document.querySelectorAll('.item');
             items.forEach((item, i) => {{
@@ -251,7 +274,6 @@ if selected_video:
                 }}
             }});
 
-            // 1つ前の文を最上部に持ってくることで、今の文を確実に2番目にする
             if (idx === 0) {{
                 ts.scrollTop = 0;
             }} else {{
@@ -264,12 +286,10 @@ if selected_video:
 
         function jumpTo(idx) {{
             if(idx < 0 || idx >= data.length) return;
-            
-            // 重要：リピートON時も即座に切り替える
             currentIdx = idx;
             v.currentTime = data[idx].start;
             v.play();
-            updateDisplay(idx);
+            updateScroll(idx);
         }}
 
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
@@ -286,7 +306,6 @@ if selected_video:
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
-            
             if (isRepeat && currentIdx !== -1) {{
                 const s = data[currentIdx];
                 if (now >= s.end - 0.05 || now < s.start - 0.1) {{
@@ -295,19 +314,18 @@ if selected_video:
                 }}
                 return;
             }}
-
             for (let i = 0; i < data.length; i++) {{
                 if (now >= data[i].start && now < data[i].end) {{
                     if (currentIdx !== i) {{
                         currentIdx = i;
-                        updateDisplay(i);
+                        updateScroll(i);
                     }}
                     break;
                 }}
             }}
         }});
-
-        updateDisplay(0);
+        updateScroll(0);
     </script>
     """
+    # インデントに注意（if selected_video の中に入れています）
     st.iframe(html_code, height=1200)
