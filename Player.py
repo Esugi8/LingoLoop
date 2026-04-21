@@ -114,6 +114,7 @@ if selected_video:
         video_base64 = base64.b64encode(video_data).decode()
         subtitles = json.loads(json_data.decode('utf-8'))
 
+    # JS用データ作成
     sub_data_js = []
     for i, s in enumerate(subtitles):
         prefix = "⚠️ " if s.get('is_hard') else ""
@@ -123,7 +124,8 @@ if selected_video:
             "note": s.get('note', '')
         })
 
-     html_code = f"""
+    # ここから html_code の定義（if selected_video: の中に入れる）
+    html_code = f"""
     <div id="app-wrapper" class="hide-en hide-jp">
         <div id="video-header">
             <video id="v" controls playsinline webkit-playsinline>
@@ -151,7 +153,7 @@ if selected_video:
         #video-header {{ flex-shrink: 0; background: #000; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
         video {{ width: 100%; aspect-ratio: 16/9; display: block; }}
         .learning-controls {{ display: flex; gap: 2px; padding: 4px; background: #333; }}
-        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.1em; }}
+        .ctrl-btn {{ flex: 1; padding: 15px; border: none; border-radius: 4px; background: #555; color: white; font-weight: bold; font-size: 1.2em; }}
         .ctrl-btn.active {{ background: #f44336; }}
         .visibility-controls {{ display: flex; gap: 8px; padding: 6px 12px; background: #222; align-items: center; border-bottom: 1px solid #444; }}
         .vis-btn {{ padding: 6px 16px; border: 1px solid #666; border-radius: 20px; background: #444; color: #aaa; font-weight: bold; cursor: pointer; transition: 0.2s; }}
@@ -162,8 +164,8 @@ if selected_video:
         .item.near {{ opacity: 0.8; }}
         .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
         .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
-        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; display: block; }}
-        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; display: block; }}
+        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; display: block; transition: 0.2s; }}
+        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; display: block; transition: 0.2s; }}
         .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; }}
         #app-wrapper.hide-en .en {{ background-color: #555; color: #555; border-radius: 4px; user-select: none; }}
         #app-wrapper.hide-en .mini-copy-btn:first-child {{ display: none; }}
@@ -178,7 +180,7 @@ if selected_video:
         const ts = document.getElementById('transcript-scroll-area');
         const wrapper = document.getElementById('app-wrapper');
         let currentIdx = -1; 
-        let repeatMode = 0; // 0:OFF, 1:1s(Listening), 2:3s(Practice)
+        let repeatMode = 0; 
         let isWaiting = false;
 
         function copyText(txt) {{ navigator.clipboard.writeText(txt); }}
@@ -227,7 +229,6 @@ if selected_video:
         document.getElementById('btn-prev').onclick = () => jumpTo(currentIdx - 1);
         document.getElementById('btn-next').onclick = () => jumpTo(currentIdx + 1);
         
-        // 修正：リピートボタンのサイクル切り替え
         const rBtn = document.getElementById('btn-repeat');
         rBtn.onclick = () => {{
             repeatMode = (repeatMode + 1) % 3;
@@ -238,8 +239,6 @@ if selected_video:
 
         v.addEventListener('timeupdate', () => {{
             const now = v.currentTime;
-            
-            // 修正：repeatModeに応じた待機時間の切り替え
             if (repeatMode > 0 && currentIdx !== -1 && !isWaiting) {{
                 const s = data[currentIdx];
                 if (now >= s.end - 0.05) {{
@@ -256,7 +255,6 @@ if selected_video:
                     return;
                 }}
             }}
-
             if (!isWaiting) {{
                 for (let i = 0; i < data.length; i++) {{
                     if (now >= data[i].start && now < data[i].end) {{
