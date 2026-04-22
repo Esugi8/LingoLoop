@@ -162,11 +162,11 @@ if selected_video:
         .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
         .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
         
-        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; pointer-events: none; }}
-        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; pointer-events: none; }}
+        .en {{ font-weight: bold; font-size: 1.10em; line-height: 1.4; color: #000; pointer-events: none; }}
+        .jp {{ font-size: 0.9em; color: #555; margin-top: 4px; pointer-events: none; }}
         
         /* 音（Phonetic）のデザイン */
-        .phonetic {{ font-size: 0.8em; color: #1976d2; font-style: italic; margin-top: 2px; display: none; pointer-events: none; }}
+        .phonetic {{ font-size: 0.9em; color: #1976d2; font-style: italic; margin-top: 2px; display: none; pointer-events: none; }}
         #app-wrapper.show-phonetic .phonetic, .item.reveal-phonetic .phonetic {{ display: block; }}
 
         .star-text {{ display: none; color: #888; letter-spacing: 1px; }}
