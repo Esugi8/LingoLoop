@@ -70,7 +70,6 @@ def save_to_spreadsheet(en, jp, video_name, memo):
 # --- サイドバー UI ---
 with st.sidebar:
     st.header("LingoLoop AI")
-    
     st.subheader("新規動画を追加")
     new_url = st.text_input("YouTube URL")
     new_folder_name = st.text_input("保存名 (空なら動画ID)")
@@ -116,14 +115,12 @@ if selected_video:
 
     sub_data_js = []
     for i, s in enumerate(subtitles):
-        prefix = "⚠️ " if s.get('is_hard') else ""
         sub_data_js.append({
             "id": i, "start": s['start'], "end": s['end'],
-            "text": prefix + s['text'], "translation": s['translation'],
-            "note": s.get('note', '')
+            "text": s['text'], "translation": s['translation'],
+            "phonetic": s.get('phonetic', '')
         })
 
-    # ここが html_code。if selected_video: のブロック内(半角4スペース)に正確に配置
     html_code = f"""
     <div id="app-wrapper" class="hide-en hide-jp">
         <div id="video-header">
@@ -138,7 +135,7 @@ if selected_video:
             <div class="visibility-controls">
                 <button class="vis-btn" id="toggle-en-btn">英</button>
                 <button class="vis-btn" id="toggle-jp-btn">日</button>
-                <span class="vis-label">表示切替</span>
+                <button class="vis-btn" id="toggle-ph-btn">音</button>
             </div>
         </div>
         <div id="transcript-scroll-area">
@@ -157,15 +154,21 @@ if selected_video:
         .visibility-controls {{ display: flex; gap: 8px; padding: 6px 12px; background: #222; align-items: center; border-bottom: 1px solid #444; }}
         .vis-btn {{ padding: 6px 16px; border: 1px solid #666; border-radius: 20px; background: #444; color: #aaa; font-weight: bold; cursor: pointer; transition: 0.2s; }}
         .vis-btn.active {{ background: #2196f3; color: white; border-color: #2196f3; }}
+        .vis-btn.active-sound {{ background: #ff9800; color: white; border-color: #ff9800; }}
         #transcript-scroll-area {{ flex-grow: 1; overflow-y: scroll; background: #fff; -webkit-overflow-scrolling: touch; padding: 0 !important; margin: 0 !important; scroll-behavior: auto; }}
         .item {{ position: relative; padding: 12px 60px 12px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; box-sizing: border-box; opacity: 0.2; transition: opacity 0.3s; user-select: text; -webkit-user-select: text; }}
         .item.active {{ background: #fff9c4 !important; border-left: 8px solid #2196f3; opacity: 1; }}
         .item.near {{ opacity: 0.8; }}
         .copy-group {{ position: absolute; right: 5px; top: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 200; }}
         .mini-copy-btn {{ background: #eee; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 0.8em; font-weight: bold; cursor: pointer; }}
-        .en {{ font-weight: bold; font-size: 1.2em; line-height: 1.4; color: #000; pointer-events: none; }}
-        .jp {{ font-size: 0.85em; color: #555; margin-top: 4px; pointer-events: none; }}
-        .note {{ font-size: 0.7em; color: #d32f2f; margin-top: 3px; pointer-events: none; }}
+        
+        .en {{ font-weight: bold; font-size: 0.85em; line-height: 1.4; color: #000; pointer-events: none; }}
+        .jp {{ font-size: 0.75em; color: #555; margin-top: 4px; pointer-events: none; }}
+        
+        /* 音（Phonetic）のデザイン */
+        .phonetic {{ font-size: 0.8em; color: #1976d2; font-style: italic; margin-top: 2px; display: none; pointer-events: none; }}
+        #app-wrapper.show-phonetic .phonetic, .item.reveal-phonetic .phonetic {{ display: block; }}
+
         .star-text {{ display: none; color: #888; letter-spacing: 1px; }}
         #app-wrapper.hide-en .real-text {{ display: none; }}
         #app-wrapper.hide-en .star-text {{ display: inline; }}
@@ -188,13 +191,15 @@ if selected_video:
 
         const btnEn = document.getElementById('toggle-en-btn');
         const btnJp = document.getElementById('toggle-jp-btn');
+        const btnPh = document.getElementById('toggle-ph-btn');
+
         btnEn.onclick = () => {{ wrapper.classList.toggle('hide-en') ? btnEn.classList.remove('active') : btnEn.classList.add('active'); }};
         btnJp.onclick = () => {{ wrapper.classList.toggle('hide-jp') ? btnJp.classList.remove('active') : btnJp.classList.add('active'); }};
+        btnPh.onclick = () => {{ wrapper.classList.toggle('show-phonetic') ? btnPh.classList.add('active-sound') : btnPh.classList.remove('active-sound'); }};
 
         data.forEach((s, i) => {{
             const div = document.createElement('div');
-            div.id = 's-'+i; 
-            div.className = 'item';
+            div.id = 's-'+i; div.className = 'item';
             const stars = s.text.replace(/[^\\s]/g, '*');
             div.innerHTML = `
                 <div class="copy-group">
@@ -202,13 +207,15 @@ if selected_video:
                     <button class="mini-copy-btn" onclick="event.stopPropagation(); copyText('${{s.translation.replace(/'/g, "\\'")}}')">日</button>
                 </div>
                 <div class="en">
-                    <span class="real-text">${{s.text}}</span>
-                    <span class="star-text">${{stars}}</span>
+                    <span class="real-text">${{s.text}}</span><span class="star-text">${{stars}}</span>
                 </div>
+                <div class="phonetic">${{s.phonetic}}</div>
                 <div class="jp">${{s.translation}}</div>
-                ${{s.note ? `<div class="note">💡 ${{s.note}}</div>` : ''}}
             `;
-            div.onclick = () => jumpTo(i);
+            div.onclick = () => {{
+                div.classList.toggle('reveal-phonetic');
+                jumpTo(i);
+            }};
             sl.appendChild(div);
         }});
 

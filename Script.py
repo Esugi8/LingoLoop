@@ -8,24 +8,14 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
 import streamlit as st
-#from dotenv import load_dotenv
 
-#load_dotenv("API.env")
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # --- 設定項目 ---
-TOKEN_FILE = 'token.json'
 DRIVE_FOLDER_ID = '1S1c7T0qe1e84xDvEZsZBQuFRbLREph1C' 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
-#client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-# def get_drive_service():
-    # creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-    # return build('drive', 'v3', credentials=creds)
-    
 def get_drive_service():
-    # ファイルからではなく、Secretsの辞書から認証情報を生成
     token_info = st.secrets["google_drive_token"]
     creds = Credentials.from_authorized_user_info(token_info, SCOPES)
     return build('drive', 'v3', credentials=creds)
@@ -44,120 +34,109 @@ def create_drive_folder(folder_name, parent_id):
     return file.get('id')
 
 def convert_to_seconds(time_str):
-    """
-    "1:05.2" などの文字列を 65.2 (float) に変換する。
-    0.1秒単位の精度を維持します。
-    """
     try:
-        # 文字列から数字と記号以外を除去（念のため）
         time_str = str(time_str).strip()
         parts = time_str.split(':')
-        
-        if len(parts) == 2:  # MM:SS.s
+        if len(parts) == 2:
             return round(int(parts[0]) * 60 + float(parts[1]), 1)
-        elif len(parts) == 3:  # HH:MM:SS.s
+        elif len(parts) == 3:
             return round(int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2]), 1)
         else:
-            return float(time_str) # すでに秒数の場合
+            return float(time_str)
     except (ValueError, IndexError):
         return 0.0
 
-# --- Script.py の該当箇所を修正 ---
-
-# 関数の引数に custom_folder_name を追加
 def process_youtube_video(url, custom_folder_name=None):
     local_video = "temp_video.mp4"
     local_json = "temp_subtitles.json"
 
-    # 1. YouTubeダウンロード
     ydl_opts = {
         'format': 'mp4[height<=480]',
         'outtmpl': local_video,
         'nocheckcertificate': True,
         'overwrites': True,
-        # --- 403エラー回避のための追加設定 ---
         'quiet': True,
         'no_warnings': True,
-        'headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-        },
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android_vr', 'web_embedded']
-            }
-        }
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         v_id = info['id']
-        # フォルダ名の決定：指定があればそれを使用、なければ動画ID
         folder_display_name = custom_folder_name if custom_folder_name else v_id
 
-    # 2. Gemini 解析
     print(f"--- Uploading {v_id} to Gemini ---")
     video_file = client.files.upload(file=local_video)
     while video_file.state == "PROCESSING":
         time.sleep(2)
         video_file = client.files.get(name=video_file.name)
 
-    print("--- Analyzing with Gemini (High Precision) ---")
+    print("--- Analyzing with Gemini (Natural Sound Spelling Mode) ---")
     prompt = """
-    動画の英語音声を書き起こし、1〜2文ずつのセグメントに分けたJSON形式のリストを出力してください。
+    動画の英語音声を書き起こし、JSON形式のリストを出力してください。
+    『実際に聞こえる音』を読みやすくアルファベットで綴った「Sound Spelling」を作成することが最重要ミッションです。
     
     [出力項目]
-    - 'start': 開始秒数（数値）。
-    - 'end': 終了秒数（数値）。
-    - 'text': 英語書き起こし。
-    - 'translation': 自然な日本語訳。
+    - 'start', 'end', 'text', 'translation'
+    - 'phonetic': 実際の音の流れを表現したもの（※全セグメントで必須）
     
-    [厳守ルール]
-    1. タイムスタンプは「秒数のみ」ではなく、必ず「分:秒.ミリ秒」の形式（例 "0:45.3"）で出力してください。
-    2. 1分5秒の場合、"105" ではなく "1:05.0" と出力してください。
-    3. 0.1秒（ミリ秒）単位まで正確に聞き取り、タイムスタンプを打ってください。
-    4. 1つのセグメントは長くても5秒以内、1〜2文程度に区切ってください。
+    [Sound Spelling（phonetic）の厳守ルール]
+    1. 原則として、単語の間には半角スペースを入れ、視認性を高めること。
+    2. 音が完全に連結（リエゾン）して1語のように聞こえる部分のみ、単語を繋げて書くこと。
+       - Check it out -> Chekeraut
+       - What are you -> Waraya / Watcha
+       - Get it -> Gerit
+    3. 音の脱落（リダクション）を綴りに反映すること。
+       - going to -> gonna
+       - for you -> foya
+       - want to -> wanna
+    4. フラッピング（Tがラ行化）を反映すること（water -> warer）。
+    5. 各語の頭文字を大文字にしたり、句読点（, . ?）を使うことでリズムを表現すること。
+       例: "Oh, ekselent. Evryon wuz so-so nice."
     """
     
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite-preview",
-        contents=[video_file, prompt],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.1,
-        )
-    )
+    # --- リトライロジックの追加 ---
+    max_retries = 3
+    response = None
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.1-flash-lite-preview",
+                contents=[video_file, prompt],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1,
+                )
+            )
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"!!! API Error: {e}. Retrying in 5s... ({attempt+2}/{max_retries}) ---")
+                time.sleep(5)
+                continue
+            else:
+                raise e
     
-    # --- Python側で型変換と精度調整を行う ---
     raw_data = json.loads(response.text)
     refined_subtitles = []
-    
     for item in raw_data:
-        # 文字列の "1:05.2" を 65.2 という数値に変換
         item['start'] = convert_to_seconds(item['start'])
         item['end'] = convert_to_seconds(item['end'])
         refined_subtitles.append(item)
     
-    # 最終的なJSONを保存（Player.pyが読み込む形）
     with open(local_json, "w", encoding="utf-8") as f:
         json.dump(refined_subtitles, f, ensure_ascii=False, indent=2)
 
-    # 3. Google Drive への保存
-    print("--- Storing to Google Drive ---")
     try:
-        # フォルダ作成時に folder_display_name を使用
         v_folder_id = create_drive_folder(folder_display_name, DRIVE_FOLDER_ID)
         upload_to_drive(local_video, v_folder_id, 'video/mp4')
         upload_to_drive(local_json, v_folder_id, 'application/json')
     except Exception as e:
         print(f"Drive Upload Error: {e}")
 
-    # 4. クリーンアップ
     os.remove(local_video)
     os.remove(local_json)
     client.files.delete(name=video_file.name)
     print(f"--- ALL DONE for {folder_display_name} ---")
 
 if __name__ == "__main__":
-    test_url = "https://www.youtube.com/watch?v=z0PJnc8BFTk"
+    test_url = "https://www.youtube.com/watch?v=E6LpBIwGyA4"
     process_youtube_video(test_url)
