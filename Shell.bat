@@ -14,6 +14,4 @@ if not exist .venv (
 )
 
 rem Open a new cmd window, activate .venv, and keep it open (/k)
-cmd /k ".venv\Scripts\activate.bat"
-
-rem & python app.py"
+cmd /k ".venv\Scripts\activate.bat & streamlit run Player.py"
