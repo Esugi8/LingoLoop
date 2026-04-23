@@ -167,7 +167,7 @@ if selected_video:
         
         /* 音（Phonetic）のデザイン */
         .phonetic {{ font-size: 0.9em; color: #1976d2; font-style: italic; margin-top: 2px; display: none; pointer-events: none; }}
-        #app-wrapper.show-phonetic .phonetic, .item.reveal-phonetic .phonetic {{ display: block; }}
+        #app-wrapper.show-phonetic .phonetic {{ display: block; }}
 
         .star-text {{ display: none; color: #888; letter-spacing: 1px; }}
         #app-wrapper.hide-en .real-text {{ display: none; }}
@@ -213,7 +213,6 @@ if selected_video:
                 <div class="jp">${{s.translation}}</div>
             `;
             div.onclick = () => {{
-                div.classList.toggle('reveal-phonetic');
                 jumpTo(i);
             }};
             sl.appendChild(div);
